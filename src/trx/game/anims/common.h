@@ -20,6 +20,13 @@ void Anim_LoadFrames(
     const LEVEL_FORMAT_LOADER *loader, const int16_t *data,
     int32_t data_length);
 
+// Where a frame sits among the level's frames, which every copy of the game
+// loading the same level lays out alike, so the index can name the frame to
+// another one. -1 for a frame that is not among them.
+int32_t Anim_GetFrameIndex(const ANIM_FRAME *frame);
+// The frame at an index from Anim_GetFrameIndex, or nullptr out of range.
+ANIM_FRAME *Anim_GetFrameByIndex(int32_t frame_idx);
+
 int32_t Anim_GetTotalCount(void);
 ANIM *Anim_GetAnim(int32_t anim_idx);
 ANIM_CHANGE *Anim_GetChange(int32_t change_idx);

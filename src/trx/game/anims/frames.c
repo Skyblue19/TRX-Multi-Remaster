@@ -19,6 +19,7 @@ typedef enum {
 } M_ROT_PACK_MODE;
 
 static ANIM_FRAME *m_Frames = nullptr;
+static int32_t m_FrameCount = 0;
 
 static int32_t M_GetAnimFrameCount(
     const LEVEL_FORMAT_LOADER *const loader, const int32_t anim_idx,
@@ -165,6 +166,24 @@ void Anim_InitialiseFrames(const int32_t num_frames)
 {
     LOG_INFO("%d anim frames", num_frames);
     m_Frames = GameBuf_Alloc(sizeof(ANIM_FRAME) * num_frames, GBUF_ANIM_FRAMES);
+    m_FrameCount = num_frames;
+}
+
+int32_t Anim_GetFrameIndex(const ANIM_FRAME *const frame)
+{
+    if (m_Frames == nullptr || frame < m_Frames
+        || frame >= m_Frames + m_FrameCount) {
+        return -1;
+    }
+    return frame - m_Frames;
+}
+
+ANIM_FRAME *Anim_GetFrameByIndex(const int32_t frame_idx)
+{
+    if (m_Frames == nullptr || frame_idx < 0 || frame_idx >= m_FrameCount) {
+        return nullptr;
+    }
+    return &m_Frames[frame_idx];
 }
 
 void Anim_LoadFrames(

@@ -2,6 +2,7 @@
 
 #include <trx/core/log.h>
 #include <trx/core/subsystem.h>
+#include <trx/debug.h>
 #include <trx/game/console.h>
 #include <trx/game/coop/puppet.h>
 #include <trx/game/game_flow.h>
@@ -13,7 +14,7 @@
 
 // Bumped whenever a packet changes shape. A peer on another version is turned
 // away when it connects, rather than misreading every packet after.
-#define M_PROTOCOL_VERSION 1
+#define M_PROTOCOL_VERSION 2
 #define M_CHANNEL_COUNT 1
 #define M_CHANNEL_STATE 0
 // The host takes one other player for now.
@@ -29,8 +30,18 @@ typedef enum {
     M_PACKET_PLAYER_STATE = 1,
 } M_PACKET_TYPE;
 
-// version, type, level, then the state: pos, rot, room, anim, frame.
-#define M_PLAYER_STATE_SIZE (1 + 1 + 4 + 3 * 4 + 3 * 2 + 2 + 2 + 2)
+#define M_XYZ_16_SIZE (3 * 2)
+// frame base, frame, anim, rot, flash
+#define M_ARM_SIZE (4 + 2 + 2 + M_XYZ_16_SIZE + 2)
+// visible, mesh, offset
+#define M_EQUIPMENT_SIZE (1 + 4 + M_XYZ_16_SIZE)
+// version, type and level, then the state: the body's pos, rot, room, anim
+// and frame; the gun's status and type, head and torso rots, both arms and
+// the flare; and what is worn on each body part.
+#define M_PLAYER_STATE_SIZE                                                    \
+    (1 + 1 + 4 + 3 * 4 + M_XYZ_16_SIZE + 2 + 2 + 2 + 2 + 2                    \
+     + 2 * M_XYZ_16_SIZE + 2 * M_ARM_SIZE + 1                                  \
+     + LM_NUMBER_OF * (4 + M_EQUIPMENT_SIZE))
 
 static struct {
     bool started;
@@ -85,6 +96,93 @@ static int32_t M_GetS32(const uint8_t **const cursor)
         bits |= (uint32_t)M_GetU8(cursor) << (8 * i);
     }
     return (int32_t)bits;
+}
+
+static void M_PutXYZ16(uint8_t **const cursor, const XYZ_16 value)
+{
+    M_PutS16(cursor, value.x);
+    M_PutS16(cursor, value.y);
+    M_PutS16(cursor, value.z);
+}
+
+static XYZ_16 M_GetXYZ16(const uint8_t **const cursor)
+{
+    // Read one at a time: the order of initialisers is not the order of
+    // evaluation.
+    const int16_t x = M_GetS16(cursor);
+    const int16_t y = M_GetS16(cursor);
+    const int16_t z = M_GetS16(cursor);
+    return (XYZ_16) { .x = x, .y = y, .z = z };
+}
+
+static void M_PutArm(uint8_t **const cursor, const COOP_ARM_STATE *const arm)
+{
+    M_PutS32(cursor, arm->frame_base);
+    M_PutS16(cursor, arm->frame_num);
+    M_PutS16(cursor, arm->anim_num);
+    M_PutXYZ16(cursor, arm->rot);
+    M_PutS16(cursor, arm->flash_gun);
+}
+
+static void M_GetArm(const uint8_t **const cursor, COOP_ARM_STATE *const arm)
+{
+    arm->frame_base = M_GetS32(cursor);
+    arm->frame_num = M_GetS16(cursor);
+    arm->anim_num = M_GetS16(cursor);
+    arm->rot = M_GetXYZ16(cursor);
+    arm->flash_gun = M_GetS16(cursor);
+}
+
+static void M_PutState(
+    uint8_t **const cursor, const COOP_PLAYER_STATE *const state)
+{
+    M_PutS32(cursor, state->pos.x);
+    M_PutS32(cursor, state->pos.y);
+    M_PutS32(cursor, state->pos.z);
+    M_PutXYZ16(cursor, state->rot);
+    M_PutS16(cursor, state->room_num);
+    M_PutS16(cursor, state->anim_num);
+    M_PutS16(cursor, state->frame_num);
+    M_PutS16(cursor, state->gun_status);
+    M_PutS16(cursor, state->gun_type);
+    M_PutXYZ16(cursor, state->head_rot);
+    M_PutXYZ16(cursor, state->torso_rot);
+    M_PutArm(cursor, &state->left_arm);
+    M_PutArm(cursor, &state->right_arm);
+    M_PutU8(cursor, state->flare_control ? 1 : 0);
+    for (int32_t i = 0; i < LM_NUMBER_OF; i++) {
+        M_PutS32(cursor, state->meshes[i]);
+        const COOP_EQUIPMENT_STATE *const equipment = &state->equipment[i];
+        M_PutU8(cursor, equipment->visible ? 1 : 0);
+        M_PutS32(cursor, equipment->mesh);
+        M_PutXYZ16(cursor, equipment->offset);
+    }
+}
+
+static void M_GetState(
+    const uint8_t **const cursor, COOP_PLAYER_STATE *const state)
+{
+    state->pos.x = M_GetS32(cursor);
+    state->pos.y = M_GetS32(cursor);
+    state->pos.z = M_GetS32(cursor);
+    state->rot = M_GetXYZ16(cursor);
+    state->room_num = M_GetS16(cursor);
+    state->anim_num = M_GetS16(cursor);
+    state->frame_num = M_GetS16(cursor);
+    state->gun_status = M_GetS16(cursor);
+    state->gun_type = M_GetS16(cursor);
+    state->head_rot = M_GetXYZ16(cursor);
+    state->torso_rot = M_GetXYZ16(cursor);
+    M_GetArm(cursor, &state->left_arm);
+    M_GetArm(cursor, &state->right_arm);
+    state->flare_control = M_GetU8(cursor) != 0;
+    for (int32_t i = 0; i < LM_NUMBER_OF; i++) {
+        state->meshes[i] = M_GetS32(cursor);
+        COOP_EQUIPMENT_STATE *const equipment = &state->equipment[i];
+        equipment->visible = M_GetU8(cursor) != 0;
+        equipment->mesh = M_GetS32(cursor);
+        equipment->offset = M_GetXYZ16(cursor);
+    }
 }
 
 static uint16_t M_GetPort(void)
@@ -192,16 +290,7 @@ static void M_OnReceive(const ENetPacket *const packet)
     }
 
     m_Net.remote_level_num = M_GetS32(&cursor);
-    COOP_PLAYER_STATE *const state = &m_Net.remote_state;
-    state->pos.x = M_GetS32(&cursor);
-    state->pos.y = M_GetS32(&cursor);
-    state->pos.z = M_GetS32(&cursor);
-    state->rot.x = M_GetS16(&cursor);
-    state->rot.y = M_GetS16(&cursor);
-    state->rot.z = M_GetS16(&cursor);
-    state->room_num = M_GetS16(&cursor);
-    state->anim_num = M_GetS16(&cursor);
-    state->frame_num = M_GetS16(&cursor);
+    M_GetState(&cursor, &m_Net.remote_state);
     m_Net.has_remote_state = true;
 }
 
@@ -238,15 +327,8 @@ static void M_SendState(const int32_t level_num)
     M_PutU8(&cursor, M_PROTOCOL_VERSION);
     M_PutU8(&cursor, M_PACKET_PLAYER_STATE);
     M_PutS32(&cursor, level_num);
-    M_PutS32(&cursor, state.pos.x);
-    M_PutS32(&cursor, state.pos.y);
-    M_PutS32(&cursor, state.pos.z);
-    M_PutS16(&cursor, state.rot.x);
-    M_PutS16(&cursor, state.rot.y);
-    M_PutS16(&cursor, state.rot.z);
-    M_PutS16(&cursor, state.room_num);
-    M_PutS16(&cursor, state.anim_num);
-    M_PutS16(&cursor, state.frame_num);
+    M_PutState(&cursor, &state);
+    ASSERT(cursor == data + sizeof(data));
 
     // Unreliable and sequenced: a lost state is replaced by the next frame's,
     // and one that arrives late is dropped rather than played out of order.

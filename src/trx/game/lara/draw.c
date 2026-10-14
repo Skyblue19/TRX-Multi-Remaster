@@ -29,6 +29,10 @@ typedef enum {
 
 static bool m_CacheMatrices = false;
 static bool m_IsLara = true;
+// The item being drawn, which is not Lara for a puppet or Bacon Lara.
+static const ITEM *m_DrawItem = nullptr;
+// The equipment a puppet wears, in place of Lara's, while one is drawn.
+static const LARA_SKIN_EQUIPMENT *m_PuppetEquipment = nullptr;
 
 static M_ARMS M_GetArms(const LARA_GUN_TYPE gun_type)
 {
@@ -56,7 +60,12 @@ static void M_CalculateLight(
             .pos = { 0, 0, 0 },
             .room_num = item->room_num,
         };
-        if (!Lara_GetMeshPos(LM_TORSO, &sample_pos.pos)) {
+        if (!m_IsLara) {
+            // Lara's mesh positions are hers alone, so another Lara is lit
+            // from the middle of her own frame.
+            sample_pos.pos = item->pos;
+            sample_pos.pos.y += (frame->bounds.min.y + frame->bounds.max.y) / 2;
+        } else if (!Lara_GetMeshPos(LM_TORSO, &sample_pos.pos)) {
             Lara_GetJointAbsPosition(&sample_pos.pos, LM_TORSO);
         }
         Room_GetSector(sample_pos.pos, &sample_pos.room_num);
@@ -82,7 +91,7 @@ static void M_DrawEquipmentMesh(
 {
     const OBJECT_MESH *const mesh = equipment->mesh;
     const GAME_VECTOR pos = {
-        .room_num = Lara_GetItem()->room_num,
+        .room_num = m_DrawItem->room_num,
         .pos = Matrix_MulVec32_M(
             g_WMatrixPtr,
             (XYZ_32) {
@@ -178,27 +187,29 @@ static void M_DrawBodyPart(
         Matrix_TranslateRel32_I(bone[mesh - 1].pos);
         Matrix_Rot16_ID(mesh_rots_1[mesh], mesh_rots_2[mesh]);
         M_CacheMatrix(mesh);
-        M_DrawLaraMesh(Lara_GetItem(), mesh, clip, true);
+        M_DrawLaraMesh(m_DrawItem, mesh, clip, true);
     } else {
         Matrix_TranslateRel32(bone[mesh - 1].pos);
         Matrix_Rot16(mesh_rots_1[mesh]);
         M_CacheMatrix(mesh);
-        M_DrawLaraMesh(Lara_GetItem(), mesh, clip, false);
+        M_DrawLaraMesh(m_DrawItem, mesh, clip, false);
     }
 }
 
 static inline void M_DrawEquipment(
     const LARA_MESH mesh, const CLIP clip, const bool interpolated)
 {
-    if (!m_IsLara) {
+    const LARA_SKIN_EQUIPMENT *equipment = nullptr;
+    if (m_IsLara) {
+        if (!Item_IsMeshVisible(Lara_GetItem(), mesh)) {
+            return;
+        }
+        equipment = Lara_Skin_GetEquipment(mesh);
+    } else if (m_PuppetEquipment != nullptr) {
+        equipment = &m_PuppetEquipment[mesh];
+    } else {
         return;
     }
-
-    if (!Item_IsMeshVisible(Lara_GetItem(), mesh)) {
-        return;
-    }
-
-    const LARA_SKIN_EQUIPMENT *const equipment = Lara_Skin_GetEquipment(mesh);
     if (!equipment->visible || equipment->mesh == nullptr) {
         return;
     }
@@ -462,6 +473,7 @@ bool Lara_Draw(const ITEM *const item)
 {
     const ITEM *const lara_item = Lara_GetItem();
     m_IsLara = item == lara_item;
+    m_DrawItem = item;
     if (m_IsLara) {
         Output_Water_ObserveLaraFrame();
     }
@@ -484,7 +496,8 @@ bool Lara_Draw(const ITEM *const item)
     ANIM_FRAME *frames[2];
     if (lara->hit_direction < 0) {
         int32_t rate;
-        const int32_t frac = Item_GetFrames(lara_item, frames, &rate);
+        // The drawn item's own frames: another Lara strikes her own pose.
+        const int32_t frac = Item_GetFrames(item, frames, &rate);
         if (frac != 0 && Lara_Pose_Get() == nullptr) {
             M_Draw_I(item, frames[0], frames[1], frac, rate);
             goto finish;
@@ -789,4 +802,61 @@ finish:
     g_PhdTop = top;
     g_PhdBottom = bottom;
     return true;
+}
+
+LARA_APPEARANCE Lara_GetAppearance(void)
+{
+    const LARA_INFO *const lara = Lara_GetLaraInfo();
+    LARA_APPEARANCE appearance = {
+        .gun_status = lara->gun_status,
+        .gun_type = lara->gun_type,
+        .head_rot = lara->head_rot,
+        .torso_rot = lara->torso_rot,
+        .left_arm = lara->left_arm,
+        .right_arm = lara->right_arm,
+        .flare_control = lara->flare.control,
+    };
+    for (LARA_MESH mesh = LM_FIRST; mesh < LM_NUMBER_OF; mesh++) {
+        appearance.meshes[mesh] = Lara_Mesh_Get(mesh);
+        appearance.equipment[mesh] = *Lara_Skin_GetEquipment(mesh);
+    }
+    return appearance;
+}
+
+bool Lara_DrawAppearance(
+    const ITEM *const item, const LARA_APPEARANCE *const appearance)
+{
+    // The draw reads the look off Lara's own state, so the appearance stands
+    // in for it for the length of one draw, and hers is put back after.
+    LARA_INFO *const lara = Lara_GetLaraInfo();
+    const LARA_INFO saved_lara = *lara;
+    OBJECT_MESH *saved_meshes[LM_NUMBER_OF];
+    for (LARA_MESH mesh = LM_FIRST; mesh < LM_NUMBER_OF; mesh++) {
+        saved_meshes[mesh] = Lara_Mesh_Get(mesh);
+        Lara_Mesh_Set(mesh, appearance->meshes[mesh]);
+    }
+
+    lara->gun_status = appearance->gun_status;
+    lara->gun_type = appearance->gun_type;
+    lara->interp.result.head_rot = appearance->head_rot;
+    lara->interp.result.torso_rot = appearance->torso_rot;
+    lara->left_arm = appearance->left_arm;
+    lara->left_arm.interp.result.rot = appearance->left_arm.rot;
+    lara->right_arm = appearance->right_arm;
+    lara->right_arm.interp.result.rot = appearance->right_arm.rot;
+    lara->flare.control = appearance->flare_control;
+    // Nothing of hers that the draw keys off: no hit to flinch from, and no
+    // mounted gun to hold.
+    lara->hit_direction = -1;
+    lara->gun_item_num = NO_ITEM;
+    m_PuppetEquipment = appearance->equipment;
+
+    const bool drawn = Lara_Draw(item);
+
+    m_PuppetEquipment = nullptr;
+    *lara = saved_lara;
+    for (LARA_MESH mesh = LM_FIRST; mesh < LM_NUMBER_OF; mesh++) {
+        Lara_Mesh_Set(mesh, saved_meshes[mesh]);
+    }
+    return drawn;
 }
