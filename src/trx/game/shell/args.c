@@ -50,6 +50,10 @@ static void M_ShowHelp(void)
         "   --debug-render-performance: output diagnostic information after "
         "each "
         "frame.");
+    puts("   --coop-ghost: show a puppet Lara replaying Lara's moves.");
+    puts(
+        "   --coop-ghost-delay <NUM>: how many frames the puppet trails by "
+        "(default 30).");
     puts("");
 
     puts("Available mods:");
@@ -250,6 +254,16 @@ RESULT Shell_ParseArgs(VECTOR *const args, SHELL_ARGS **const out_args)
         }
         if (!strcmp(arg, "-q") || !strcmp(arg, "--quiet")) {
             result->quiet = true;
+        }
+        if (!strcmp(arg, "--coop-ghost")) {
+            result->coop.ghost = true;
+        }
+        if (!strcmp(arg, "--coop-ghost-delay") && next_arg != nullptr) {
+            int32_t delay = 0;
+            if (String_ParseInteger(next_arg, &delay) && delay > 0) {
+                result->coop.ghost_delay = delay;
+            }
+            i++;
         }
     }
 

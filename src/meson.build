@@ -359,6 +359,7 @@ common_sources = [
   'trx/game/console/completion.c',
   'trx/game/console/history.c',
   'trx/game/console/registry.c',
+  'trx/game/coop/ghost.c',
   'trx/game/creature/alert.c',
   'trx/game/creature/behavior.c',
   'trx/game/creature/common.c',

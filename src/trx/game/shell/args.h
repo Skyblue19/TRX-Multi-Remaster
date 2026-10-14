@@ -33,6 +33,12 @@ typedef struct {
     bool debug_render_performance;
     int32_t headless_fps; // in headless mode, force fixed fps (0 = unlocked)
     bool quiet;
+    struct {
+        // A puppet Lara replaying Lara's moves, a stand-in for a remote
+        // player until there is a network to drive one.
+        bool ghost;
+        int32_t ghost_delay; // in logic frames (0 = default)
+    } coop;
 } SHELL_ARGS;
 
 // Adopts `raw_args`.

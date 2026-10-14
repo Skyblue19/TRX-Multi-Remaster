@@ -2,6 +2,7 @@
 #include <trx/core/benchmark.h>
 #include <trx/core/log.h>
 #include <trx/game/camera.h>
+#include <trx/game/coop/ghost.h>
 #include <trx/game/cutseq/playback.h>
 #include <trx/game/demo.h>
 #include <trx/game/effects.h>
@@ -54,6 +55,8 @@ void Level_Unload(void)
     Gym_TrackManager_Reset(GYM_TRACK_QUAD);
     Creature_Reset();
     Anim_Reset();
+    // Before the items and minted objects it points at go.
+    Coop_Ghost_Reset();
     Item_Reset();
     // Before the objects go: what it holds are objects this level minted.
     Lara_Skin_Reset();
