@@ -4,6 +4,7 @@
 #include <trx/core/memory.h>
 #include <trx/core/strings.h>
 #include <trx/debug.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/replay/test_replay.h>
 #include <trx/game/shell.h>
 
@@ -181,6 +182,11 @@ bool Shell_ShouldPauseForFocusLoss(void)
     // A recording's events are read before anything asks this, so pausing
     // would fire them into a game that is not running.
     if (TestReplay_IsOpened()) {
+        return false;
+    }
+    // The other players keep playing, so the world cannot stop for one of
+    // them looking at another window.
+    if (Coop_IsActive()) {
         return false;
     }
     return g_Config.gameplay.pause_on_focus_lost && !Shell_IsFocused();

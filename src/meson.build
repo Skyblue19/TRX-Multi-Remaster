@@ -246,6 +246,12 @@ dep_backtrace = c_compiler.find_library('backtrace', static: true, required: fal
 dep_swscale = dependency('libswscale', static: staticdeps)
 dep_swresample = dependency('libswresample', static: staticdeps)
 dep_lua = dependency(get_option('lua_dep'), static: staticdeps)
+# Co-op transport. Built from the WrapDB wrap where the system has none.
+dep_enet = dependency(
+  'enet',
+  static: staticdeps,
+  default_options: ['default_library=static', 'warning_level=0'],
+)
 c_compiler.check_header('uthash.h', required: true)
 dep_mathlibrary = c_compiler.find_library('m', static: staticdeps, required: false)
 
@@ -266,6 +272,7 @@ dependencies = [
   dep_avformat,
   dep_avutil,
   dep_backtrace,
+  dep_enet,
   dep_glew,
   dep_lua,
   dep_mathlibrary,
@@ -359,7 +366,10 @@ common_sources = [
   'trx/game/console/completion.c',
   'trx/game/console/history.c',
   'trx/game/console/registry.c',
+  'trx/game/coop/common.c',
   'trx/game/coop/ghost.c',
+  'trx/game/coop/net.c',
+  'trx/game/coop/puppet.c',
   'trx/game/creature/alert.c',
   'trx/game/creature/behavior.c',
   'trx/game/creature/common.c',

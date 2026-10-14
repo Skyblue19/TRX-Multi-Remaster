@@ -2,7 +2,7 @@
 #include <trx/core/file.h>
 #include <trx/core/subsystem.h>
 #include <trx/debug.h>
-#include <trx/game/coop/ghost.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/game.h>
 #include <trx/game/game_flow.h>
 #include <trx/game/items.h>
@@ -85,9 +85,9 @@ bool Savegame_IsSavedItem(const int32_t item_num)
     if (item_num == Lara_GetLaraInfo()->gun_item_num) {
         return false;
     }
-    // Its object is minted afresh each level and has no name a savegame could
-    // carry, and the puppet is respawned once the level runs again anyway.
-    if (Coop_Ghost_IsItem(item_num)) {
+    // A puppet's object is minted afresh each level and has no name a savegame
+    // could carry, and the puppet comes back once the level runs again anyway.
+    if (Coop_IsPuppetItem(item_num)) {
         return false;
     }
     return item_num < Item_GetLevelCount() || !Item_Get(item_num)->is_destroyed;

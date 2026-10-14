@@ -38,6 +38,11 @@ typedef struct {
         // player until there is a network to drive one.
         bool ghost;
         int32_t ghost_delay; // in logic frames (0 = default)
+        // Play over the network: either host a game, or join the one hosted
+        // at `join`, a name or an address.
+        bool host;
+        const char *join;
+        int32_t port; // 0 = default
     } coop;
 } SHELL_ARGS;
 

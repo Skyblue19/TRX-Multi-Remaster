@@ -54,6 +54,9 @@ static void M_ShowHelp(void)
     puts(
         "   --coop-ghost-delay <NUM>: how many frames the puppet trails by "
         "(default 30).");
+    puts("   --coop-host: host a co-op game for another player to join.");
+    puts("   --coop-join <ADDRESS>: join the co-op game hosted at ADDRESS.");
+    puts("   --coop-port <NUM>: the co-op network port (default 41300).");
     puts("");
 
     puts("Available mods:");
@@ -262,6 +265,21 @@ RESULT Shell_ParseArgs(VECTOR *const args, SHELL_ARGS **const out_args)
             int32_t delay = 0;
             if (String_ParseInteger(next_arg, &delay) && delay > 0) {
                 result->coop.ghost_delay = delay;
+            }
+            i++;
+        }
+        if (!strcmp(arg, "--coop-host")) {
+            result->coop.host = true;
+        }
+        if (!strcmp(arg, "--coop-join") && next_arg != nullptr) {
+            result->coop.join = next_arg;
+            i++;
+        }
+        if (!strcmp(arg, "--coop-port") && next_arg != nullptr) {
+            int32_t port = 0;
+            if (String_ParseInteger(next_arg, &port) && port > 0
+                && port <= 65535) {
+                result->coop.port = port;
             }
             i++;
         }

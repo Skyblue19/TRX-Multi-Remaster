@@ -2,7 +2,7 @@
 #include <trx/game/camera.h>
 #include <trx/game/clock.h>
 #include <trx/game/console.h>
-#include <trx/game/coop/ghost.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/creature.h>
 #include <trx/game/cutseq.h>
 #include <trx/game/demo.h>
@@ -240,8 +240,8 @@ GF_COMMAND Game_Control(const bool demo_mode)
         }
     }
 
-    // After Lara has moved, so the puppet replays where she ended this frame.
-    Coop_Ghost_Control();
+    // After Lara has moved, so what co-op sends is where she ended this frame.
+    Coop_Control();
 
     Game_TickPostControl();
     Game_TickEndFrame();
