@@ -57,6 +57,7 @@ static void M_ShowHelp(void)
     puts("   --coop-host: host a co-op game for another player to join.");
     puts("   --coop-join <ADDRESS>: join the co-op game hosted at ADDRESS.");
     puts("   --coop-port <NUM>: the co-op network port (default 41300).");
+    puts("   --coop-name <NAME>: the name the other co-op players see.");
     puts("");
 
     puts("Available mods:");
@@ -273,6 +274,10 @@ RESULT Shell_ParseArgs(VECTOR *const args, SHELL_ARGS **const out_args)
         }
         if (!strcmp(arg, "--coop-join") && next_arg != nullptr) {
             result->coop.join = next_arg;
+            i++;
+        }
+        if (!strcmp(arg, "--coop-name") && next_arg != nullptr) {
+            result->coop.name = next_arg;
             i++;
         }
         if (!strcmp(arg, "--coop-port") && next_arg != nullptr) {

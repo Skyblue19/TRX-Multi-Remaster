@@ -150,6 +150,7 @@ typedef struct {
         bool show_bars;
         bool show_loading_bar;
         bool enable_bar_flashing;
+        bool enable_coop_nameplates;
         struct {
             UI_ELEMENT_LOCATION location;
             char *color;

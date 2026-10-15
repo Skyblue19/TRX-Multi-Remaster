@@ -14,6 +14,11 @@ bool Coop_IsActive(void)
     return Shell_GetArgs()->coop.ghost || Coop_Net_IsEnabled();
 }
 
+bool Coop_IsClient(void)
+{
+    return Coop_Net_IsEnabled() && !Coop_Net_IsHost();
+}
+
 bool Coop_IsPlayableLevel(void)
 {
     const GF_LEVEL *const level = GF_GetCurrentLevel();
@@ -32,9 +37,9 @@ bool Coop_IsPlayableLevel(void)
 
 void Coop_Tick(void)
 {
-    if (Coop_Net_IsEnabled()) {
-        Coop_Net_Service();
-    }
+    // Called even with no session, to start the one the command line asks
+    // for.
+    Coop_Net_Service();
 }
 
 void Coop_Control(void)
@@ -49,6 +54,26 @@ void Coop_Control(void)
         Coop_Net_Control();
     } else {
         Coop_Ghost_Control();
+    }
+}
+
+void Coop_DrawOverlay(void)
+{
+    if (Coop_IsActive() && Coop_IsPlayableLevel()) {
+        Coop_Puppet_DrawLabels();
+    }
+}
+
+void Coop_OnLevelSequence(const GF_LEVEL *const level)
+{
+    switch (level->type) {
+    case GFL_NORMAL:
+    case GFL_GYM:
+    case GFL_BONUS:
+        Coop_Net_OnLevelSequence(level->num);
+        break;
+    default:
+        break;
     }
 }
 

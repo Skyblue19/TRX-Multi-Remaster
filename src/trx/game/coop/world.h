@@ -55,6 +55,7 @@ void Coop_World_GetAll(VECTOR *items, COOP_FLIP_RECORD *flip);
 // report wins outright, as the host's does. Without it, an item this game
 // changed itself a moment ago keeps its own state, apart from a pickup taken,
 // which is gone for everyone. A record that does not fit this level is
-// skipped.
-void Coop_World_ApplyItem(const COOP_ITEM_RECORD *record, bool authoritative);
-void Coop_World_ApplyFlip(const COOP_FLIP_RECORD *record, bool authoritative);
+// skipped. Returns whether the record was taken, which is what the host
+// passes on to the other games.
+bool Coop_World_ApplyItem(const COOP_ITEM_RECORD *record, bool authoritative);
+bool Coop_World_ApplyFlip(const COOP_FLIP_RECORD *record, bool authoritative);

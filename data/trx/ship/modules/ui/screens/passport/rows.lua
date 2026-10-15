@@ -1,6 +1,7 @@
 -- The rows of the passport's lists: the save slots, the levels and the ways
 -- to start a game.
 
+local coop = require("common.ui.screens.passport.coop")
 local pages = require("common.ui.screens.passport.pages")
 
 local M = {}
@@ -88,7 +89,7 @@ function M.new_game_rows()
   local play_prev = false
   local story = false
   if
-    not trx.config.get("flow.load_save_disabled")
+    not pages.load_save_disabled()
     and trx.config.get("gameplay.enable_play_previous_levels")
   then
     pages.each_slot(function(slot_num, pool)
@@ -120,6 +121,9 @@ function M.new_game_rows()
       text = trx.locale.get("general/passport/switch_mod"),
       choice = "switch_mod",
     }
+  end
+  for _, row in ipairs(coop.new_game_rows()) do
+    extras[#extras + 1] = row
   end
   for index, row in ipairs(extras) do
     row.rule = index == 1

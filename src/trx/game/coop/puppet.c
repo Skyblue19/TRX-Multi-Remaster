@@ -1,15 +1,37 @@
 #include <trx/game/coop/puppet.h>
 
+#include <trx/config.h>
 #include <trx/core/log.h>
+#include <trx/core/math/const.h>
 #include <trx/core/result.h>
+#include <trx/core/utils.h>
 #include <trx/game/anims.h>
+#include <trx/game/coop/identity.h>
 #include <trx/game/gun/registry.h>
 #include <trx/game/items.h>
 #include <trx/game/lara.h>
+#include <trx/game/matrix.h>
 #include <trx/game/objects.h>
+#include <trx/game/output/vars.h>
 #include <trx/game/rooms.h>
+#include <trx/game/ui/common.h>
+#include <trx/game/ui/draw.h>
+#include <trx/game/ui/scaler.h>
+#include <trx/game/ui/text.h>
+#include <trx/game/viewport.h>
+
+#include <math.h>
+#include <string.h>
 
 static_assert(COOP_MAX_PUPPETS == 4, "spell out every puppet slot below");
+
+// How far above a puppet's feet its label sits, a little over Lara's height.
+#define M_LABEL_HEIGHT 900
+#define M_LABEL_TEXT_SCALE 0.8f
+// The health bar under the name, in UI canvas units.
+#define M_BAR_WIDTH 40.0f
+#define M_BAR_HEIGHT 3.0f
+#define M_BAR_GAP 2.0f
 
 static struct {
     // Minted once per level for all the puppets, like the gold skin's twins.
@@ -19,6 +41,9 @@ static struct {
     // been told yet.
     LARA_APPEARANCE appearances[COOP_MAX_PUPPETS];
     bool has_appearance[COOP_MAX_PUPPETS];
+    // What the label over each puppet shows.
+    char names[COOP_MAX_PUPPETS][COOP_NAME_SIZE];
+    int16_t hit_points[COOP_MAX_PUPPETS];
 } m_Puppets = {
     .object_id = NO_OBJECT,
     .item_nums = { NO_ITEM, NO_ITEM, NO_ITEM, NO_ITEM },
@@ -234,6 +259,7 @@ COOP_PLAYER_STATE Coop_Puppet_CaptureLara(void)
         .room_num = lara_item->room_num,
         .anim_num = Item_GetRelativeAnim(lara_item),
         .frame_num = Item_GetRelativeFrame(lara_item),
+        .hit_points = lara_item->hit_points,
         .gun_status = appearance.gun_status,
         .gun_type = appearance.gun_type,
         .head_rot = appearance.head_rot,
@@ -294,7 +320,126 @@ bool Coop_Puppet_Apply(
 
     M_DecodeAppearance(state, &m_Puppets.appearances[slot]);
     m_Puppets.has_appearance[slot] = true;
+    m_Puppets.hit_points[slot] = state->hit_points;
     return true;
+}
+
+void Coop_Puppet_SetName(const int32_t slot, const char *const name)
+{
+    if (!M_IsValidSlot(slot)) {
+        return;
+    }
+    strncpy(m_Puppets.names[slot], name, COOP_NAME_SIZE - 1);
+    m_Puppets.names[slot][COOP_NAME_SIZE - 1] = '\0';
+}
+
+// Where a point in the world falls on the UI canvas, or false behind the
+// camera. The scene is rasterized on its own pixel grid, so the point is
+// placed by where it falls within that grid and carried over to the UI's.
+static bool M_ProjectToCanvas(
+    const XYZ_32 pos, float *const out_x, float *const out_y)
+{
+    const MATRIX *const m = &g_ViewMatrix;
+    const double w2v = (double)(1 << W2V_SHIFT);
+    // Relative to the camera, as absolute coordinates overflow the products.
+    const XYZ_32 rel = {
+        .x = pos.x - g_ViewPos.x,
+        .y = pos.y - g_ViewPos.y,
+        .z = pos.z - g_ViewPos.z,
+    };
+    const double zv = ((double)m->_20 * rel.x + (double)m->_21 * rel.y
+                       + (double)m->_22 * rel.z)
+        / w2v;
+    if (zv <= 0.0) {
+        return false;
+    }
+    const double xv = ((double)m->_00 * rel.x + (double)m->_01 * rel.y
+                       + (double)m->_02 * rel.z)
+        / w2v;
+    const double yv = ((double)m->_10 * rel.x + (double)m->_11 * rel.y
+                       + (double)m->_12 * rel.z)
+        / w2v;
+
+    const double game_x =
+        Viewport_GetCenterX(VIEWPORT_GAME) + xv * g_PhdPersp / zv;
+    const double game_y =
+        Viewport_GetCenterY(VIEWPORT_GAME) + yv * g_PhdPersp / zv;
+    const double rel_x = (game_x - Viewport_GetMinX(VIEWPORT_GAME))
+        / Viewport_GetWidth(VIEWPORT_GAME);
+    const double rel_y = (game_y - Viewport_GetMinY(VIEWPORT_GAME))
+        / Viewport_GetHeight(VIEWPORT_GAME);
+    if (rel_x < 0.0 || rel_x > 1.0 || rel_y < 0.0 || rel_y > 1.0) {
+        return false;
+    }
+
+    const float ui_x = (float)(rel_x * Viewport_GetWidth(VIEWPORT_UI));
+    const float ui_y = (float)(rel_y * Viewport_GetHeight(VIEWPORT_UI));
+    *out_x = UI_Scaler_CalcInverse(ui_x * 0x10000, UI_SCALER_TARGET_GENERIC)
+        / 0x10000;
+    *out_y = UI_Scaler_CalcInverse(ui_y * 0x10000, UI_SCALER_TARGET_GENERIC)
+        / 0x10000;
+    return true;
+}
+
+// A bar from green at full health to red near none, over a dark backing.
+static void M_DrawHealthBar(const float x, const float y, const int16_t hp)
+{
+    int32_t shown_hp = hp;
+    CLAMP(shown_hp, 0, LARA_MAX_HITPOINTS);
+    const float ratio = shown_hp / (float)LARA_MAX_HITPOINTS;
+    const int32_t sx = lroundf(UI_ScaleX(x - M_BAR_WIDTH / 2));
+    const int32_t sy = lroundf(UI_ScaleY(y));
+    const int32_t sw = lroundf(UI_ScaleX(M_BAR_WIDTH));
+    const int32_t sh = MAX(1, lroundf(UI_ScaleY(M_BAR_HEIGHT)));
+    UI_ScheduleDrawScreenFlatQuad(
+        sx - 1, sy - 1, 0, sw + 2, sh + 2,
+        (RGBA_8888) { .r = 0, .g = 0, .b = 0, .a = 0xA0 });
+    const RGBA_8888 fill = {
+        .r = (uint8_t)(0xFF * (1.0f - ratio)),
+        .g = (uint8_t)(0xD0 * ratio),
+        .b = 0x20,
+        .a = 0xFF,
+    };
+    const int32_t fill_w = lroundf(sw * ratio);
+    if (fill_w > 0) {
+        UI_ScheduleDrawScreenFlatQuad(sx, sy, 0, fill_w, sh, fill);
+    }
+}
+
+void Coop_Puppet_DrawLabels(void)
+{
+    if (!g_Config.ui.enable_coop_nameplates) {
+        return;
+    }
+    const UI_TEXT_SETTINGS settings = {
+        .scale = M_LABEL_TEXT_SCALE,
+        .z = 0,
+    };
+    // The interface draws only into a layer; the labels sit under the HUD.
+    UI_BeginLayer(UI_LAYER_UNDER);
+    for (int32_t i = 0; i < COOP_MAX_PUPPETS; i++) {
+        if (m_Puppets.item_nums[i] == NO_ITEM) {
+            continue;
+        }
+        const ITEM *const item = Item_Get(m_Puppets.item_nums[i]);
+        XYZ_32 head = item->interp.result.pos;
+        head.y -= M_LABEL_HEIGHT;
+        float x;
+        float y;
+        if (!M_ProjectToCanvas(head, &x, &y)) {
+            continue;
+        }
+
+        const char *const name = m_Puppets.names[i];
+        if (name[0] != '\0') {
+            float text_w;
+            float text_h;
+            UI_Text_Measure(name, &text_w, &text_h, settings);
+            UI_Text_Draw(name, x - text_w / 2, y - text_h, settings);
+        }
+        M_DrawHealthBar(x, y + M_BAR_GAP, m_Puppets.hit_points[i]);
+    }
+    UI_EndLayer(UI_LAYER_UNDER);
 }
 
 void Coop_Puppet_Remove(const int32_t slot)
@@ -306,6 +451,8 @@ void Coop_Puppet_Remove(const int32_t slot)
     m_Puppets.item_nums[slot] = NO_ITEM;
     m_Puppets.has_appearance[slot] = false;
 }
+
+// Names outlive the level; the other players do not change with it.
 
 void Coop_Puppet_Reset(void)
 {

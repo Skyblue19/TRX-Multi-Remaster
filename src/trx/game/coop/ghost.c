@@ -38,6 +38,7 @@ void Coop_Ghost_Control(void)
         return;
     }
     const int32_t replayed = m_Ghost.recorded - 1 - delay;
+    Coop_Puppet_SetName(M_SLOT, "Ghost");
     Coop_Puppet_Apply(
         M_SLOT, &m_Ghost.history[replayed & (M_HISTORY_SIZE - 1)]);
 }

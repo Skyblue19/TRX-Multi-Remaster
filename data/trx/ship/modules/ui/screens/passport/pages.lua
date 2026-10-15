@@ -105,9 +105,15 @@ function M.switchable_mods()
   return mods
 end
 
+-- Saving and loading are off by the settings, or for a game that joined a
+-- co-op session, whose saves are the host's.
+function M.load_save_disabled()
+  return trx.config.get("flow.load_save_disabled") or trx.coop.is_client
+end
+
 function M.saving_enabled()
   return trx.savegame.slot_count(trx.savegame.Pool.NORMAL) > 0
-    and not trx.config.get("flow.load_save_disabled")
+    and not M.load_save_disabled()
 end
 
 -------------------------------------------------------------------------------
@@ -151,7 +157,10 @@ function M.determine_pages(mode)
   end
 
   local saves = has_saves() and M.saving_enabled()
+  -- A co-op client restarting on its own would leave the host's level
+  -- behind, so it may only once it has died.
   local can_restart = trx.game.can_restart_level()
+    and (mode == trx.inventory_ring.Mode.DEATH or not trx.coop.is_client)
 
   if mode == trx.inventory_ring.Mode.TITLE then
     set(1, Page.LOAD_GAME, saves)

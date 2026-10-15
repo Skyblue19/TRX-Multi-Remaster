@@ -4,6 +4,7 @@
 -- is a layer above it. A choice that leaves the passport runs as a game flow
 -- command once the ring has closed.
 
+local coop = require("common.ui.screens.passport.coop")
 local hold_button = require("common.ui.widgets.hold_button")
 local pages = require("common.ui.screens.passport.pages")
 local requester = require("common.ui.widgets.requester")
@@ -407,6 +408,9 @@ local function save_with_crystal(row)
 end
 
 function Passport:choose_new_game(row)
+  if coop.choose_new_game(self, row) then
+    return
+  end
   if row.choice == "new_game" then
     trx.game.start_new_game()
   elseif row.choice == "new_game_plus" then
@@ -456,6 +460,9 @@ function Passport:choose_new_game(row)
 end
 
 function Passport:choose(entry, row)
+  if coop.choose(self, entry, row) then
+    return
+  end
   local role = entry.role
 
   if role == pages.Page.NEW_GAME then
@@ -550,8 +557,18 @@ function Passport:choose(entry, row)
 end
 
 function Passport:control_list(entry, keys)
+  -- A list may watch something change, and may read its keys elsewhere.
+  if entry.on_tick ~= nil then
+    entry.on_tick()
+  end
+  if entry.ignore_keys then
+    return
+  end
   local picked = entry.req:control(keys)
   if picked == "cancel" then
+    if entry.on_cancel ~= nil then
+      entry.on_cancel()
+    end
     entry.layer:close()
   elseif picked ~= nil then
     self:choose(entry, entry.req.rows[picked])

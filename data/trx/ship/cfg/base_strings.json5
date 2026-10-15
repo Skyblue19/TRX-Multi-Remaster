@@ -1716,6 +1716,10 @@
             "title": "Flash bars",
             "description": "Makes Lara's health and oxygen bars blink when she's running low on either resource.",
         },
+        "ui.enable_coop_nameplates": {
+            "title": "Co-op player names",
+            "description": "Shows the name and health of each other co-op player above their Lara.",
+        },
         "ui.enable_smooth_bars": {
             "title": "Smooth bars",
             "description": "Makes the UI bars use smooth color transitions.",

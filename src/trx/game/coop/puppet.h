@@ -40,6 +40,7 @@ typedef struct {
     // borrows them.
     int16_t anim_num;
     int16_t frame_num;
+    int16_t hit_points;
 
     int16_t gun_status;
     int16_t gun_type;
@@ -63,6 +64,13 @@ bool Coop_Puppet_Apply(int32_t slot, const COOP_PLAYER_STATE *state);
 
 // Take puppet `slot` out of the level, if it is in.
 void Coop_Puppet_Remove(int32_t slot);
+
+// The name shown over puppet `slot`.
+void Coop_Puppet_SetName(int32_t slot, const char *name);
+
+// Draw each puppet's name and health over its head, unless the player turned
+// them off. Called while the game scene is drawn, after the rooms.
+void Coop_Puppet_DrawLabels(void);
 
 // Forget every puppet. The level's items and minted objects are about to go.
 void Coop_Puppet_Reset(void);

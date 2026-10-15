@@ -16,6 +16,10 @@ void Savegame_Init(void);
 SAVEGAME_VERSION Savegame_GetInitialVersion(void);
 void Savegame_SetInitialVersion(SAVEGAME_VERSION version);
 
+// Whether saving and loading are off altogether: by the player's settings, or
+// because this game joined a co-op session, whose saves are the host's.
+bool Savegame_IsLoadSaveDisabled(void);
+
 // Whether the player can save the game at will. Save crystal modes reserve
 // saving for the crystals themselves.
 bool Savegame_IsManualSaveAllowed(void);

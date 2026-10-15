@@ -1,5 +1,6 @@
 #include <trx/config.h>
 #include <trx/game/camera.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/cutseq.h>
 #include <trx/game/interpolation.h>
 #include <trx/game/lua/events/scene.h>
@@ -16,6 +17,7 @@ void Game_Draw(const bool draw_overlay)
     LUA_Scene_Paint();
     if (draw_overlay && !CutSeq_IsActive()) {
         Overlay_DrawGameInfo();
+        Coop_DrawOverlay();
     }
     CutSeq_DrawOverlay();
     Output_Overlay_DrawLetterbox();

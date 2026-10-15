@@ -3,6 +3,7 @@ X_UI_ROW(ui.bar_scale)
 X_UI_ROW(ui.bar_look)
 X_UI_ROW(ui.enable_smooth_bars)
 X_UI_ROW(ui.enable_bar_flashing)
+X_UI_ROW(ui.enable_coop_nameplates)
 
 X_UI_ROW(ui.healthbar_color)
 X_UI_ROW(ui.healthbar_color_ps1)

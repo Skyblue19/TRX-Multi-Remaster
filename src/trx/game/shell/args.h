@@ -43,6 +43,9 @@ typedef struct {
         bool host;
         const char *join;
         int32_t port; // 0 = default
+        // The name shown to the other players, which also picks the player
+        // id kept for it.
+        const char *name;
     } coop;
 } SHELL_ARGS;
 

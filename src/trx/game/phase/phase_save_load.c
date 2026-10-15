@@ -106,7 +106,7 @@ static void M_Draw(PHASE *const phase)
 bool Phase_SaveLoad_IsAvailable(const INVENTORY_MODE mode)
 {
     if (!g_Config.ui.instant_save_load_screen
-        || g_Config.flow.load_save_disabled) {
+        || Savegame_IsLoadSaveDisabled()) {
         return false;
     }
 

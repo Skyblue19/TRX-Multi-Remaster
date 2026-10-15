@@ -72,10 +72,15 @@ void Savegame_Init(void)
     SG_Manager_Init();
 }
 
+bool Savegame_IsLoadSaveDisabled(void)
+{
+    return g_Config.flow.load_save_disabled || Coop_IsClient();
+}
+
 bool Savegame_IsManualSaveAllowed(void)
 {
     const SAVE_CRYSTAL_MODE crystal_mode = g_Config.gameplay.save_crystal_mode;
-    return !g_Config.flow.load_save_disabled
+    return !Savegame_IsLoadSaveDisabled()
         && crystal_mode != SAVE_CRYSTAL_SAVE
         && crystal_mode != SAVE_CRYSTAL_SAVE_PICKUP;
 }

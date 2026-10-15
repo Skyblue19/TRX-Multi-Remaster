@@ -248,7 +248,7 @@ void Coop_World_GetAll(VECTOR *const items, COOP_FLIP_RECORD *const flip)
     *flip = M_EncodeFlip();
 }
 
-void Coop_World_ApplyItem(
+bool Coop_World_ApplyItem(
     const COOP_ITEM_RECORD *const record, const bool authoritative)
 {
     if (!m_World.known) {
@@ -256,11 +256,11 @@ void Coop_World_ApplyItem(
     }
     const int16_t item_num = record->item_num;
     if (!M_IsShared(item_num)) {
-        return;
+        return false;
     }
     ITEM *const item = Item_Get(item_num);
     if (item->object_id != record->object_id || item->is_destroyed) {
-        return;
+        return false;
     }
 
     // A pickup taken is gone for everyone, whoever saw it last.
@@ -269,20 +269,21 @@ void Coop_World_ApplyItem(
     } else if (authoritative || !M_IsRecent(m_World.changed_at[item_num])) {
         M_ApplyState(item_num, record);
     } else {
-        return;
+        return false;
     }
     // What came in needs no echo back.
     m_World.sent[item_num] = M_Encode(item_num);
+    return true;
 }
 
-void Coop_World_ApplyFlip(
+bool Coop_World_ApplyFlip(
     const COOP_FLIP_RECORD *const record, const bool authoritative)
 {
     if (!m_World.known) {
         M_Learn();
     }
     if (!authoritative && M_IsRecent(m_World.flip_changed_at)) {
-        return;
+        return false;
     }
 
     for (int32_t i = 0; i < MAX_FLIP_MAPS; i++) {
@@ -296,4 +297,5 @@ void Coop_World_ApplyFlip(
     }
     Room_SetFlipStatus((record->groups & M_FLIP_STATUS_BIT) != 0);
     m_World.sent_flip = M_EncodeFlip();
+    return true;
 }

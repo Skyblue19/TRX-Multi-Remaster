@@ -2,6 +2,7 @@
 
 #include <trx/core/enum_map.h>
 #include <trx/debug.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/game.h>
 #include <trx/game/game_flow/sequencer_events.h>
 #include <trx/game/inventory.h>
@@ -140,6 +141,10 @@ RESULT GF_InterpretSequence(
         *out_cmd = (GF_COMMAND) { .action = GF_NOOP };
         return OK;
     }
+
+    // Before the level's opening videos, so that co-op players start the
+    // level together.
+    Coop_OnLevelSequence(level);
 
     GF_ResetLevelSetup(seq_ctx);
 

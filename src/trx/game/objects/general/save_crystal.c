@@ -13,6 +13,7 @@
 #include <trx/game/objects/property.h>
 #include <trx/game/output.h>
 #include <trx/game/rooms.h>
+#include <trx/game/savegame.h>
 #include <trx/game/sound.h>
 #include <trx/game/stats.h>
 #include <trx/version.h>
@@ -306,7 +307,7 @@ static void M_Collision(
         return;
     }
 
-    if (g_Config.flow.load_save_disabled) {
+    if (Savegame_IsLoadSaveDisabled()) {
         Lara_RefuseInteraction();
         return;
     }

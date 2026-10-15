@@ -130,7 +130,7 @@ GF_COMMAND Game_Control(const bool demo_mode)
     Camera_Binoculars_Control();
 
     if ((g_InputDB.quick_save || g_InputDB.quick_load) && !demo_mode
-        && !g_Config.flow.load_save_disabled) {
+        && !Savegame_IsLoadSaveDisabled()) {
         bool quick_handled = false;
         if (g_InputDB.quick_save && !lara->extra_anim && lara->death_timer == 0
             && Savegame_IsManualSaveAllowed()) {
@@ -201,7 +201,7 @@ GF_COMMAND Game_Control(const bool demo_mode)
             g_OverlayFlag = 0;
         } else if (g_OverlayFlag > 0) {
             if (g_Config.flow.lockout_option_ring
-                && g_Config.flow.load_save_disabled) {
+                && Savegame_IsLoadSaveDisabled()) {
                 g_OverlayFlag = 0;
             } else if (g_Input.save) {
                 g_OverlayFlag = -2;
