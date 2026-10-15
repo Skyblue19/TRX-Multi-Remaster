@@ -6,6 +6,7 @@
 #include <trx/core/strings.h>
 #include <trx/game/clock.h>
 #include <trx/game/console/common.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/fader.h>
 #include <trx/game/fmv.h>
 #include <trx/game/game.h>
@@ -155,6 +156,8 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
 {
     m_CurrentFrame++;
     Shell_ProcessEvents();
+    // Whatever the phase, so that a player in a menu stays connected.
+    Coop_Tick();
     Overlay_Control();
 
     const GF_COMMAND gf_cmd = M_HandleOverride(phase);

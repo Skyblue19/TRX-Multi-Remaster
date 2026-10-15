@@ -370,6 +370,7 @@ common_sources = [
   'trx/game/coop/ghost.c',
   'trx/game/coop/net.c',
   'trx/game/coop/puppet.c',
+  'trx/game/coop/world.c',
   'trx/game/creature/alert.c',
   'trx/game/creature/behavior.c',
   'trx/game/creature/common.c',

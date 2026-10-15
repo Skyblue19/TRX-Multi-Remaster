@@ -10,7 +10,16 @@
 // local ghost.
 bool Coop_IsActive(void);
 
-// Called once per logic frame, after Lara has moved.
+// Whether the current level is one a player plays. The demos replay recorded
+// input against a world that must stay as recorded, and the title and
+// cutscenes have nobody to show.
+bool Coop_IsPlayableLevel(void);
+
+// Called once per frame in every phase: menus and loading screens included,
+// so the connection keeps going while a player is out of the level.
+void Coop_Tick(void);
+
+// Called once per logic frame of play, after Lara has moved.
 void Coop_Control(void);
 
 // Forget everything tied to the level. Its items and minted objects are about

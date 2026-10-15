@@ -286,6 +286,11 @@ bool Coop_Puppet_Apply(
     if (item->room_num != state->room_num) {
         Item_UpdateRoom(item_num, state->room_num);
     }
+    // The shadow is laid on the floor the item stands over, which nothing
+    // else works out for a puppet.
+    int16_t floor_room_num = state->room_num;
+    const SECTOR *const sector = Room_GetSector(state->pos, &floor_room_num);
+    item->floor = Room_GetHeight(sector, state->pos);
 
     M_DecodeAppearance(state, &m_Puppets.appearances[slot]);
     m_Puppets.has_appearance[slot] = true;
