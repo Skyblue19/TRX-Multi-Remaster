@@ -740,6 +740,9 @@ bool Lara_HasExtraState(const LARA_EXTRA_STATE *const test_arr)
 
 void Lara_SwitchToExtraState(const LARA_EXTRA_STATE goal_state)
 {
+    if (Lara_HasStandIn()) {
+        return;
+    }
     ITEM *const lara_item = Lara_GetItem();
     Item_SwitchToObjAnim(lara_item, LS_EXTRA_BREATH, 0, O_LARA_EXTRA);
     lara_item->current_anim_state = LS_EXTRA_BREATH;

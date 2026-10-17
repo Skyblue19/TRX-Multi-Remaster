@@ -11,3 +11,6 @@ require("common.ui.screens.passport").setup()
 require("common.ui.screens.pause").setup()
 require("common.ui.screens.picture").setup()
 require("common.ui.screens.stats").setup()
+
+-- Co-op: what a large medipack is spent on with a teammate down.
+require("common.ui.coop_revive").setup()

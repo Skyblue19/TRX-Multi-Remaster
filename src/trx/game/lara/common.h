@@ -13,6 +13,13 @@
 
 LARA_INFO *Lara_GetLaraInfo(void);
 ITEM *Lara_GetItem(void);
+// While set, Lara_GetItem answers `item` instead of Lara's own: in co-op, a
+// creature going after another player is run against that player's puppet.
+// Lara's info stays her own. Cleared with nullptr.
+void Lara_SetStandIn(ITEM *item);
+// Whether a stand-in is set, so that what would change Lara herself, rather
+// than the item she is, is left alone.
+bool Lara_HasStandIn(void);
 void Lara_Initialise(const GF_LEVEL *level);
 void Lara_InitialiseLoad(int16_t item_num);
 void Lara_InitialiseInventory(const GF_LEVEL *level);

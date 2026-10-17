@@ -77,3 +77,8 @@ void Coop_Puppet_Reset(void);
 
 // Whether an item is a puppet, which no savegame should carry.
 bool Coop_Puppet_IsItem(int16_t item_num);
+
+// The item puppet `slot` is, or NO_ITEM while it is not in the level.
+int16_t Coop_Puppet_GetItemNum(int32_t slot);
+// The slot of the puppet an item is, or -1 for an item that is none.
+int32_t Coop_Puppet_GetSlot(int16_t item_num);

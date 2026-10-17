@@ -8,6 +8,7 @@
 #include <trx/core/utils.h>
 #include <trx/debug.h>
 #include <trx/game/const.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/creature.h>
 #include <trx/game/game.h>
 #include <trx/game/game_buf.h>
@@ -691,8 +692,11 @@ void Item_Control(void)
         const ITEM *const item = Item_Get(item_num);
         const int16_t next = item->next_simulated;
         const OBJECT *obj = Object_Get(item->object_id);
-        if (!item->is_destroyed && obj->control_func != nullptr) {
+        if (!item->is_destroyed && obj->control_func != nullptr
+            && !Coop_SkipsItemControl(item_num)) {
+            Coop_BeginItemControl(item_num);
             obj->control_func(item_num);
+            Coop_EndItemControl();
         }
         item_num = next;
     }
@@ -826,6 +830,9 @@ void Item_Activate(const int16_t item_num, const bool force)
     const OBJECT *const obj = Object_Get(item->object_id);
 
     if (item->is_simulated) {
+        return;
+    }
+    if (Coop_InterceptActivation(item_num, force)) {
         return;
     }
 

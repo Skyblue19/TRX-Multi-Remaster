@@ -120,7 +120,58 @@ static int M_L_CoopPlayers(lua_State *const L)
     return 1;
 }
 
+// trxc.coop.is_revive_prompt_open(): boolean
+static int M_L_CoopIsRevivePromptOpen(lua_State *const L)
+{
+    lua_pushboolean(L, Coop_IsRevivePromptOpen());
+    return 1;
+}
+
+// trxc.coop.close_revive_prompt()
+static int M_L_CoopCloseRevivePrompt(lua_State *const L)
+{
+    Coop_CloseRevivePrompt();
+    return 0;
+}
+
+// trxc.coop.dead_players(): { number: integer, name: string }[]
+static int M_L_CoopDeadPlayers(lua_State *const L)
+{
+    COOP_PLAYER_INFO players[COOP_MAX_PLAYERS];
+    const int32_t count = Coop_Net_GetDeadTeammates(players);
+    lua_createtable(L, count, 0);
+    for (int32_t i = 0; i < count; i++) {
+        lua_createtable(L, 0, 2);
+        lua_pushinteger(L, players[i].number);
+        lua_setfield(L, -2, "number");
+        lua_pushstring(L, players[i].name);
+        lua_setfield(L, -2, "name");
+        lua_rawseti(L, -2, i + 1);
+    }
+    return 1;
+}
+
+// trxc.coop.revive(number: integer): boolean
+static int M_L_CoopRevive(lua_State *const L)
+{
+    lua_pushboolean(
+        L, Coop_ReviveWithMedipack((int32_t)luaL_checkinteger(L, 1)));
+    return 1;
+}
+
+// trxc.coop.heal_self()
+static int M_L_CoopHealSelf(lua_State *const L)
+{
+    Coop_HealWithMedipack();
+    return 0;
+}
+
 static const luaL_Reg m_Module[] = {
+    { "is_revive_prompt_open", M_L_CoopIsRevivePromptOpen },
+    { "close_revive_prompt", M_L_CoopCloseRevivePrompt },
+    { "dead_players", M_L_CoopDeadPlayers },
+    { "revive", M_L_CoopRevive },
+    { "heal_self", M_L_CoopHealSelf },
     { "status", M_L_CoopStatus },
     { "is_host", M_L_CoopIsHost },
     { "is_start_pending", M_L_CoopIsStartPending },

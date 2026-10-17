@@ -100,6 +100,10 @@
         },
         "coop": {
             "address_fmt": "Adresse de l'hôte : %s",
+            "cancel": "Annuler",
+            "heal_self": "Te soigner",
+            "revive_fmt": "Réanimer %s",
+            "revive_title": "Grande trousse de soin",
             "connecting_fmt": "Connexion à %s...",
             "create": "Créer la partie",
             "enter_address": "Tape l'adresse de l'hôte",

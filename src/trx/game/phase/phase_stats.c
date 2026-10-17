@@ -3,6 +3,7 @@
 #include <trx/config.h>
 #include <trx/core/memory.h>
 #include <trx/debug.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/game.h>
 #include <trx/game/game_flow.h>
 #include <trx/game/input.h>
@@ -72,6 +73,9 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
     M_PRIV *const p = phase->priv;
     Input_Update();
     Shell_ProcessInput();
+    if (!p->args.show_final_stats) {
+        Coop_TickLevelStats();
+    }
     if (g_InputDB.menu_skip) {
         Input_HoldOffSkip(INPUT_SKIP_TO_SCREEN);
     }
@@ -89,11 +93,19 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
         }
         break;
 
-    case STATE_FINISH:
+    case STATE_FINISH: {
+        // In co-op, the screen stays up until the others are through.
+        if (!p->args.show_final_stats && Coop_HoldsLevelStats()) {
+            break;
+        }
+        // Where the host says to go next, held back until the screen closed.
+        const GF_COMMAND gf_cmd = GF_GetOverrideCommand();
+        GF_OverrideCommand((GF_COMMAND) { .action = GF_NOOP }, true);
         return (PHASE_CONTROL) {
             .action = PHASE_ACTION_END,
-            .gf_cmd = { .action = GF_NOOP },
+            .gf_cmd = gf_cmd,
         };
+    }
     }
 
     return (PHASE_CONTROL) { .action = PHASE_ACTION_CONTINUE };
@@ -135,6 +147,9 @@ PHASE *Phase_Stats_Create(const PHASE_STATS_ARGS args)
     phase->draw = M_Draw;
     phase->request_fade_to_black = M_RequestFadeToBlack;
     phase->uses_cross_fade_in = nullptr;
+    // A co-op client's next level comes from the host, and waits for the
+    // player to be done with the screen.
+    phase->defers_override = Coop_IsClient();
     return phase;
 }
 

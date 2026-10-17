@@ -1,5 +1,8 @@
 #pragma once
 
+#include <trx/core/json/util/read_io.h>
+#include <trx/core/json/util/write_io.h>
+#include <trx/core/result.h>
 #include <trx/game/coop/identity.h>
 
 #include <stdbool.h>
@@ -66,6 +69,54 @@ void Coop_Net_OnLevelUnload(void);
 // told to start it too, even when it is the level they are in, as the host
 // may be loading it afresh from a save.
 void Coop_Net_OnLevelSequence(int32_t level_num);
+
+// The game went back to the title, which leaves the session: a client sends
+// its last profile and goes, a host tells everyone the game is over.
+void Coop_Net_OnTitle(void);
+
+// The level is about to go: a client sends the host what Lara carries out of
+// it.
+void Coop_Net_OnLevelEnding(void);
+
+// The players' profiles in the host's save: written into the savegame being
+// made, and read back from the one being loaded, to hand back to each player
+// as they come into the level.
+void Coop_Net_DumpProfiles(JSON_WRITE_IO *io);
+RESULT Coop_Net_LoadProfiles(JSON_READ_IO *io);
+
+// Whether a dead Lara here should wait rather than see the death screen: on
+// a client always, the host deciding what comes next; on the host while
+// another player in the level lives to revive it.
+bool Coop_Net_ShouldHoldDeath(void);
+
+// The other players down in this level, up to COOP_MAX_PLAYERS of them into
+// `out`; returns how many.
+int32_t Coop_Net_GetDeadTeammates(COOP_PLAYER_INFO *out);
+
+// Brings the player numbered `number` back, at full health at Lara's side,
+// once the host agrees it is down. Returns false, sending nothing, where it
+// is not down in this level or Lara is down herself.
+bool Coop_Net_Revive(int32_t number);
+
+// Lara reached the level's exit: a client tells the host, and the host counts
+// itself in. Either then sees the level's statistics while the others finish.
+void Coop_Net_OnReachExit(void);
+// Whether the statistics at the level's end must stay up, the player having
+// seen them: on a client until the host says where to go next, on the host
+// until every living player is at the exit.
+bool Coop_Net_HoldsLevelStats(void);
+// Called every frame of those statistics: on the host, the level goes on
+// behind them for the players still in it.
+void Coop_Net_TickLevelStats(void);
+
+// A client's shot landing on one of the host's creatures, sent to the host to
+// apply. Returns false, sending nothing, where there is no host to send to.
+bool Coop_Net_SendHit(int16_t item_num, int16_t damage, uint8_t flags);
+// A blow puppet `index` took on the host, sent to its player to suffer.
+void Coop_Net_SendDamage(int32_t index, int16_t damage, uint8_t flags);
+// A client's trigger waking a creature, sent to the host, whose creature it
+// is. Returns false where there is no host to send to.
+bool Coop_Net_SendActivate(int16_t item_num, bool force);
 
 // Whether a client is on its way to the level the host went to. A screen in
 // front holds the move back until it closes.

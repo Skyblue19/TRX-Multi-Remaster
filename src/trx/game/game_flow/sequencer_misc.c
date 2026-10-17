@@ -3,6 +3,7 @@
 #include <trx/core/log.h>
 #include <trx/core/memory.h>
 #include <trx/debug.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/demo.h>
 #include <trx/game/fmv.h>
 #include <trx/game/game.h>
@@ -40,6 +41,7 @@ static void M_PlayIntroFMVs(void)
 
 RESULT GF_RunTitle(GF_COMMAND *const out_cmd)
 {
+    Coop_OnTitle();
     SG_Manager_UnbindSlot();
     GameStringTable_Apply(nullptr);
     GF_ResetLevelSetup(GFSC_NORMAL);

@@ -717,6 +717,9 @@ int32_t Lara_Skin_GetSpeechFace(void)
 
 void Lara_Skin_SwapAllExtra(const LARA_EXTRA_STATE state)
 {
+    if (Lara_HasStandIn()) {
+        return;
+    }
     const LARA_SKIN_OUTFIT *const outfit = M_GetExtraOutfit(state);
     if (outfit == nullptr) {
         return;

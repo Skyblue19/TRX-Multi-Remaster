@@ -67,6 +67,7 @@ static int16_t (*const m_CrowbarReceptacleFuncs[])(void) = {
 
 static LARA_INFO m_Lara = {};
 static ITEM *m_LaraItem = nullptr;
+static ITEM *m_StandIn = nullptr;
 static bool m_Controllable = false;
 static int16_t m_DeathCameraTarget = NO_ITEM;
 static LARA_EXTRA_STATE m_StartAnimState = LS_EXTRA_BREATH;
@@ -153,7 +154,17 @@ LARA_INFO *Lara_GetLaraInfo(void)
 
 ITEM *Lara_GetItem(void)
 {
-    return m_LaraItem;
+    return m_StandIn != nullptr ? m_StandIn : m_LaraItem;
+}
+
+void Lara_SetStandIn(ITEM *const item)
+{
+    m_StandIn = item;
+}
+
+bool Lara_HasStandIn(void)
+{
+    return m_StandIn != nullptr;
 }
 
 void Lara_InitialiseLoad(int16_t item_num)

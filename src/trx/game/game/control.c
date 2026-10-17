@@ -101,6 +101,8 @@ GF_COMMAND Game_Control(const bool demo_mode)
     }
 
     if (Game_IsLevelComplete()) {
+        // In co-op, the statistics then wait for the other players.
+        Coop_OnReachExit();
         Sound_StopAll();
         Music_Stop();
         return (GF_COMMAND) { .action = GF_LEVEL_COMPLETE };
@@ -177,11 +179,14 @@ GF_COMMAND Game_Control(const bool demo_mode)
         }
     }
 
-    if (lara->death_timer > DEATH_WAIT
-        || (lara->death_timer > DEATH_WAIT_INPUT
-            && (g_InputDB.menu_confirm || g_InputDB.menu_back)
-            && !g_Input.fly_cheat)
-        || g_OverlayFlag == 2) {
+    // In co-op, a fallen Lara waits for a teammate to revive her instead.
+    const bool hold_death = Coop_ShouldHoldDeath();
+    if (!hold_death
+        && (lara->death_timer > DEATH_WAIT
+            || (lara->death_timer > DEATH_WAIT_INPUT
+                && (g_InputDB.menu_confirm || g_InputDB.menu_back)
+                && !g_Input.fly_cheat)
+            || g_OverlayFlag == 2)) {
         if (demo_mode || (g_TRVersion >= 2 && Game_IsInGym())) {
             return (GF_COMMAND) { .action = GF_EXIT_TO_TITLE };
         }

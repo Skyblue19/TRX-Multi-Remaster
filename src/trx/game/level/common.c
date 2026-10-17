@@ -34,6 +34,9 @@ static bool m_WorldLoaded = false;
 
 void Level_Unload(void)
 {
+    // While Lara and her inventory are still about to read.
+    Coop_OnLevelEnding();
+
     m_WorldLoaded = false;
 
     // First, so the end event a dropped cutscene fires reaches a script that

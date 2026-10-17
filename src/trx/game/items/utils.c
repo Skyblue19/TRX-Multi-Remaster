@@ -4,6 +4,7 @@
 #include <trx/core/utils.h>
 #include <trx/game/anims/walk.h>
 #include <trx/game/const.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/creature.h>
 #include <trx/game/effects.h>
 #include <trx/game/items/manager.h>
@@ -141,6 +142,9 @@ void Item_TakeDamage(
     ITEM *const item, int16_t damage, const ITEM_DAMAGE_FLAGS flags,
     const ITEM *const sender)
 {
+    if (Coop_InterceptDamage(item, damage, flags, sender)) {
+        return;
+    }
     if (!Item_CanTakeDamage(item)) {
         return;
     }

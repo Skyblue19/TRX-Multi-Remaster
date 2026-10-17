@@ -191,3 +191,47 @@ void Coop_Wire_GetFlip(const uint8_t **const cursor, COOP_FLIP_RECORD *const rec
     }
 }
 
+
+void Coop_Wire_PutCreatureRecord(
+    uint8_t **const cursor, const COOP_CREATURE_RECORD *const record)
+{
+    Coop_Wire_PutS16(cursor, record->item_num);
+    Coop_Wire_PutS16(cursor, record->object_id);
+    Coop_Wire_PutU8(cursor, record->flags);
+    Coop_Wire_PutS16(cursor, record->current_anim_state);
+    Coop_Wire_PutS16(cursor, record->goal_anim_state);
+    Coop_Wire_PutS16(cursor, record->anim_num);
+    Coop_Wire_PutS16(cursor, record->frame_num);
+    Coop_Wire_PutS16(cursor, record->hit_points);
+    Coop_Wire_PutS16(cursor, record->room_num);
+    Coop_Wire_PutS32(cursor, record->pos.x);
+    Coop_Wire_PutS32(cursor, record->pos.y);
+    Coop_Wire_PutS32(cursor, record->pos.z);
+    Coop_Wire_PutXYZ16(cursor, record->rot);
+    Coop_Wire_PutS32(cursor, (int32_t)record->mesh_bits);
+    for (int32_t i = 0; i < 4; i++) {
+        Coop_Wire_PutS16(cursor, record->joints[i]);
+    }
+}
+
+void Coop_Wire_GetCreatureRecord(
+    const uint8_t **const cursor, COOP_CREATURE_RECORD *const record)
+{
+    record->item_num = Coop_Wire_GetS16(cursor);
+    record->object_id = Coop_Wire_GetS16(cursor);
+    record->flags = Coop_Wire_GetU8(cursor);
+    record->current_anim_state = Coop_Wire_GetS16(cursor);
+    record->goal_anim_state = Coop_Wire_GetS16(cursor);
+    record->anim_num = Coop_Wire_GetS16(cursor);
+    record->frame_num = Coop_Wire_GetS16(cursor);
+    record->hit_points = Coop_Wire_GetS16(cursor);
+    record->room_num = Coop_Wire_GetS16(cursor);
+    record->pos.x = Coop_Wire_GetS32(cursor);
+    record->pos.y = Coop_Wire_GetS32(cursor);
+    record->pos.z = Coop_Wire_GetS32(cursor);
+    record->rot = Coop_Wire_GetXYZ16(cursor);
+    record->mesh_bits = (uint32_t)Coop_Wire_GetS32(cursor);
+    for (int32_t i = 0; i < 4; i++) {
+        record->joints[i] = Coop_Wire_GetS16(cursor);
+    }
+}

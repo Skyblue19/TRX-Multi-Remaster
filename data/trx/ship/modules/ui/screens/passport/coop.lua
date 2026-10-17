@@ -201,11 +201,18 @@ local function push_lobby(passport)
   local req = make_req(trx.locale.get("general/coop/lobby_title"), lobby_rows())
   select_first_action(req)
   local ticks = 0
-  passport:push_list("coop_lobby", req, {
+  local self_entry
+  self_entry = passport:push_list("coop_lobby", req, {
     on_tick = function()
       -- The host started: the passport makes way for the level.
       if trx.coop.start_pending then
         passport:close(true)
+        return
+      end
+      -- The session is over, the host gone or the game full: the lobby
+      -- has nothing left to wait for.
+      if trx.coop.status == "off" then
+        self_entry.layer:close()
         return
       end
       ticks = ticks + 1

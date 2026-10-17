@@ -1,5 +1,6 @@
 #pragma once
 
+#include <trx/game/coop/creatures.h>
 #include <trx/game/coop/puppet.h>
 #include <trx/game/coop/world.h>
 
@@ -26,6 +27,11 @@
 // room, pos and rot
 #define COOP_WIRE_ITEM_RECORD_SIZE                                             \
     (2 + 2 + 2 + 1 + 3 * 2 + 2 + 2 + 2 + 2 + 3 * 4 + COOP_WIRE_XYZ_16_SIZE)
+// item, object, flags, two anim states, anim, frame, hit points, room, pos,
+// rot, meshes and four joints
+#define COOP_WIRE_CREATURE_RECORD_SIZE                                         \
+    (2 + 2 + 1 + 2 * 2 + 2 + 2 + 2 + 2 + 3 * 4 + COOP_WIRE_XYZ_16_SIZE + 4     \
+     + 4 * 2)
 // groups, one-shot slots, a mask per slot
 #define COOP_WIRE_FLIP_SIZE (2 + 2 + MAX_FLIP_MAPS)
 
@@ -45,6 +51,11 @@ void Coop_Wire_GetState(const uint8_t **cursor, COOP_PLAYER_STATE *state);
 void Coop_Wire_PutItemRecord(
     uint8_t **cursor, const COOP_ITEM_RECORD *record);
 void Coop_Wire_GetItemRecord(const uint8_t **cursor, COOP_ITEM_RECORD *record);
+
+void Coop_Wire_PutCreatureRecord(
+    uint8_t **cursor, const COOP_CREATURE_RECORD *record);
+void Coop_Wire_GetCreatureRecord(
+    const uint8_t **cursor, COOP_CREATURE_RECORD *record);
 
 void Coop_Wire_PutFlip(uint8_t **cursor, const COOP_FLIP_RECORD *record);
 void Coop_Wire_GetFlip(const uint8_t **cursor, COOP_FLIP_RECORD *record);

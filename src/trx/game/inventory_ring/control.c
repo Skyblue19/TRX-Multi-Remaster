@@ -6,6 +6,7 @@
 #include <trx/debug.h>
 #include <trx/game/camera.h>
 #include <trx/game/console.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/cutseq/playback.h>
 #include <trx/game/flyby_mode.h>
 #include <trx/game/game.h>
@@ -757,6 +758,23 @@ static GF_COMMAND M_Control(INV_RING *const ring)
             }
         }
 
+        // A co-op large medipack waits here, the game still paused, until the
+        // player says what it is for. Spent, it is already used, so the ring
+        // closes with nothing left to use; kept, the ring takes it back.
+        if (Coop_IsRevivePromptOpen()) {
+            break;
+        }
+        const COOP_REVIVE_ANSWER revive_answer = Coop_TakeReviveAnswer();
+        if (revive_answer == COOP_REVIVE_ANSWER_SPENT) {
+            m_InvChosen = NO_OBJECT;
+            InvRing_SetStatusTransition(
+                ring, RNG_CLOSING_ITEM, RNG_EXITING_INVENTORY, 0);
+            break;
+        } else if (revive_answer == COOP_REVIVE_ANSWER_KEPT) {
+            InvRing_SetStatusTransition(ring, RNG_CLOSING_ITEM, RNG_DESELECT, 0);
+            break;
+        }
+
         if (screen != UI_TAKEOVER_NUMBER_OF && UI_Takeover_IsHeld(screen)) {
             if (M_Finish(ring, false).action != GF_NOOP) {
                 m_InvChosen = inv_item->object_id;
@@ -808,7 +826,11 @@ static GF_COMMAND M_Control(INV_RING *const ring)
                 }
             }
 
-            if (g_InputDB.menu_confirm) {
+            if (g_InputDB.menu_confirm && ring->mode == INV_GAME_MODE
+                && Coop_OfferRevive(inv_item->object_id)) {
+                g_Input = (INPUT_STATE) {};
+                g_InputDB = (INPUT_STATE) {};
+            } else if (g_InputDB.menu_confirm) {
                 m_InvChosen = inv_item->object_id;
                 if (ring->type == RT_MAIN) {
                     g_InvRing_Source[RT_MAIN].current = ring->current_object;

@@ -321,6 +321,8 @@ bool Coop_Puppet_Apply(
     M_DecodeAppearance(state, &m_Puppets.appearances[slot]);
     m_Puppets.has_appearance[slot] = true;
     m_Puppets.hit_points[slot] = state->hit_points;
+    // Creatures go after a puppet only while its player lives.
+    item->hit_points = state->hit_points;
     return true;
 }
 
@@ -474,4 +476,22 @@ bool Coop_Puppet_IsItem(const int16_t item_num)
         }
     }
     return false;
+}
+
+int16_t Coop_Puppet_GetItemNum(const int32_t slot)
+{
+    return M_IsValidSlot(slot) ? m_Puppets.item_nums[slot] : NO_ITEM;
+}
+
+int32_t Coop_Puppet_GetSlot(const int16_t item_num)
+{
+    if (item_num == NO_ITEM) {
+        return -1;
+    }
+    for (int32_t i = 0; i < COOP_MAX_PUPPETS; i++) {
+        if (m_Puppets.item_nums[i] == item_num) {
+            return i;
+        }
+    }
+    return -1;
 }

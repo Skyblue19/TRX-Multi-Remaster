@@ -1462,6 +1462,12 @@ void Creature_SpecialKill(
     Item_SwitchToAnim(item, kill_anim, 0);
     item->current_anim_state = kill_state;
 
+    // The victim is another player's puppet: its own game plays the death,
+    // and Lara here is not the one being killed.
+    if (Lara_HasStandIn()) {
+        return;
+    }
+
     lara_item->pos = item->pos;
     lara_item->rot = item->rot;
     lara_item->fall_speed = 0;

@@ -191,7 +191,9 @@ bool Lara_Cheat_OpenNearestDoor(void)
     return false;
 }
 
-bool Lara_Cheat_EnterFlyMode(void)
+// Brings Lara out of whatever she was doing, back to full health even from
+// death, and lets her fly.
+static bool M_EnterFlyMode(void)
 {
     if (!M_CanEnterFlyMode()) {
         return false;
@@ -259,12 +261,20 @@ bool Lara_Cheat_EnterFlyMode(void)
     M_ReinitialiseGunMeshes();
     Lara_Skin_ApplyOutfit();
     g_Camera.type = CAM_CHASE;
+    return true;
+}
 
+bool Lara_Cheat_EnterFlyMode(void)
+{
+    if (!M_EnterFlyMode()) {
+        return false;
+    }
     Console_Info(GS("general/osd/fly_mode_on"));
     return true;
 }
 
-bool Lara_Cheat_ExitFlyMode(void)
+// Puts Lara back on her feet, or in the water, wherever she is.
+static bool M_ExitFlyMode(void)
 {
     ITEM *const lara_item = Lara_GetItem();
     LARA_INFO *const lara_info = Lara_GetLaraInfo();
@@ -297,7 +307,14 @@ bool Lara_Cheat_ExitFlyMode(void)
         InputState_Clear(&g_InputDB);
         Lara_Control();
     }
+    return true;
+}
 
+bool Lara_Cheat_ExitFlyMode(void)
+{
+    if (!M_ExitFlyMode()) {
+        return false;
+    }
     Console_Info(GS("general/osd/fly_mode_off"));
     return true;
 }
@@ -395,5 +412,17 @@ bool Lara_Cheat_Teleport(XYZ_32 pos, int16_t room_num)
         Camera_ResetPosition();
     }
 
+    return true;
+}
+
+bool Lara_Cheat_Revive(const XYZ_32 pos, const int16_t room_num)
+{
+    // Flying brings her back from death to full health, and landing puts her
+    // back on her feet; she is only moved in between.
+    if (!M_EnterFlyMode()) {
+        return false;
+    }
+    Lara_Cheat_Teleport(pos, room_num);
+    M_ExitFlyMode();
     return true;
 }
