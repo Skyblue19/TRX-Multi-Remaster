@@ -6,11 +6,13 @@
 #include <trx/game/collision/common.h>
 #include <trx/game/coop/puppet.h>
 #include <trx/game/creature.h>
+#include <trx/game/effects.h>
 #include <trx/game/items.h>
 #include <trx/game/lara.h>
 #include <trx/game/objects.h>
 #include <trx/game/pathing/lot.h>
 #include <trx/game/rooms.h>
+#include <trx/game/sound.h>
 
 #include <string.h>
 
@@ -29,6 +31,12 @@ typedef enum {
     M_FLAG_SIMULATED = 1 << 0,
     M_FLAG_VISIBLE = 1 << 1,
     M_FLAG_FINISHED = 1 << 2,
+    // Still in the world, linked in its room.
+    M_FLAG_PRESENT = 1 << 3,
+    // Gone for good.
+    M_FLAG_DESTROYED = 1 << 4,
+    // Something Lara bumps into, which a body may stop being.
+    M_FLAG_COLLIDABLE = 1 << 5,
 } M_FLAG;
 
 static struct {
@@ -51,6 +59,22 @@ static struct {
     .stand_in_slot = M_NO_TARGET,
 };
 
+// How much one creature or one frame sets off that is told to the others.
+#define M_MAX_CAPTURED_EFFECTS 32
+#define M_MAX_FRAME_EFFECTS 32
+#define M_MAX_FRAME_SOUNDS 32
+
+// On the host, the creature running now, and the effects it made so far.
+static struct {
+    int16_t item_num;
+    int16_t effects[M_MAX_CAPTURED_EFFECTS];
+    int32_t effect_count;
+    VECTOR *frame_effects;
+    VECTOR *frame_sounds;
+} m_Capture = {
+    .item_num = NO_ITEM,
+};
+
 // The host's frame count, which goes on across levels so that a stamp from
 // an earlier level never passes for a later one.
 static int32_t m_Frame = 0;
@@ -62,6 +86,9 @@ static COOP_CREATURE_RECORD M_Encode(const int16_t item_num)
     flags |= item->is_simulated ? M_FLAG_SIMULATED : 0;
     flags |= item->is_visible ? M_FLAG_VISIBLE : 0;
     flags |= item->is_finished ? M_FLAG_FINISHED : 0;
+    flags |= item->is_present ? M_FLAG_PRESENT : 0;
+    flags |= item->is_destroyed ? M_FLAG_DESTROYED : 0;
+    flags |= item->is_collidable ? M_FLAG_COLLIDABLE : 0;
     COOP_CREATURE_RECORD record = {
         .item_num = item_num,
         .object_id = item->object_id,
@@ -126,6 +153,12 @@ static void M_EnsureKnown(void)
 
 void Coop_Creatures_Reset(void)
 {
+    m_Capture.item_num = NO_ITEM;
+    m_Capture.effect_count = 0;
+    if (m_Capture.frame_effects != nullptr) {
+        Vector_Clear(m_Capture.frame_effects);
+        Vector_Clear(m_Capture.frame_sounds);
+    }
     Memory_FreePointer(&m_Creatures.sent);
     Memory_FreePointer(&m_Creatures.targets);
     Memory_FreePointer(&m_Creatures.received);
@@ -255,6 +288,27 @@ static void M_Apply(const COOP_CREATURE_RECORD *const record)
         return;
     }
 
+    // Taken out of the level on the host, as one that runs off for good: it
+    // goes here too.
+    const uint8_t flags = record->flags;
+    if ((flags & M_FLAG_DESTROYED) != 0) {
+        if (item->creature_data != nullptr) {
+            LOT_DisableBaddieAI(item_num);
+        }
+        Item_Destroy(item_num);
+        return;
+    }
+    if ((flags & M_FLAG_PRESENT) == 0) {
+        if (item->creature_data != nullptr) {
+            LOT_DisableBaddieAI(item_num);
+        }
+        Item_RemoveSimulated(item_num);
+        if (item->is_present) {
+            Item_DetachFromRoom(item_num);
+        }
+        return;
+    }
+
     // A creature can turn into another, as one that leaves the water.
     if (record->object_id != item->object_id) {
         if (record->object_id < 0 || record->object_id >= Object_GetCount()) {
@@ -267,8 +321,8 @@ static void M_Apply(const COOP_CREATURE_RECORD *const record)
         item->object_id = record->object_id;
     }
 
-    const uint8_t flags = record->flags;
     Item_SetVisible(item, (flags & M_FLAG_VISIBLE) != 0);
+    item->is_collidable = (flags & M_FLAG_COLLIDABLE) != 0;
     item->is_finished = (flags & M_FLAG_FINISHED) != 0;
     M_ApplySimulated(item_num, (flags & M_FLAG_SIMULATED) != 0);
     M_ApplyAnim(item, record);
@@ -365,6 +419,9 @@ void Coop_Creatures_BeginControl(const int16_t item_num)
         return;
     }
 
+    m_Capture.item_num = item_num;
+    m_Capture.effect_count = 0;
+
     ITEM *const item = Item_Get(item_num);
     // Allies pick their own targets among the other creatures.
     if (item->creature_data == nullptr || Creature_IsAlly(item)
@@ -389,8 +446,53 @@ void Coop_Creatures_BeginControl(const int16_t item_num)
     }
 }
 
+static void M_EnsureFrameEvents(void)
+{
+    if (m_Capture.frame_effects == nullptr) {
+        m_Capture.frame_effects = Vector_Create(sizeof(COOP_EFFECT_RECORD));
+        m_Capture.frame_sounds = Vector_Create(sizeof(COOP_SOUND_RECORD));
+    }
+}
+
+static void M_FinishCapture(void)
+{
+    if (m_Capture.item_num == NO_ITEM) {
+        return;
+    }
+    M_EnsureFrameEvents();
+    for (int32_t i = 0; i < m_Capture.effect_count; i++) {
+        const int16_t effect_num = m_Capture.effects[i];
+        if (effect_num == NO_EFFECT
+            || m_Capture.frame_effects->count >= M_MAX_FRAME_EFFECTS) {
+            continue;
+        }
+        const EFFECT *const effect = Effect_Get(effect_num);
+        // A body part keeps what it is in private data, which goes nowhere.
+        if (effect->object_id == O_BODY_PART) {
+            continue;
+        }
+        const COOP_EFFECT_RECORD record = {
+            .object_id = effect->object_id,
+            .room_num = effect->room_num,
+            .pos = effect->pos,
+            .rot = effect->rot,
+            .speed = effect->speed,
+            .fall_speed = effect->fall_speed,
+            .frame_num = effect->frame_num,
+            .counter = effect->counter,
+            .shade = effect->shade,
+            .flag1 = effect->flag1,
+            .flag2 = effect->flag2,
+        };
+        Vector_Add(m_Capture.frame_effects, &record);
+    }
+    m_Capture.item_num = NO_ITEM;
+    m_Capture.effect_count = 0;
+}
+
 void Coop_Creatures_EndControl(void)
 {
+    M_FinishCapture();
     if (m_Creatures.stand_in_slot != M_NO_TARGET) {
         Lara_SetStandIn(nullptr);
         m_Creatures.stand_in_slot = M_NO_TARGET;
@@ -410,4 +512,107 @@ void Coop_Creatures_SetLaraAway(const bool away)
 bool Coop_Creatures_IsLaraAway(void)
 {
     return m_Creatures.lara_away;
+}
+
+void Coop_Creatures_OnEffectCreated(const int16_t effect_num)
+{
+    if (m_Capture.item_num != NO_ITEM
+        && m_Capture.effect_count < M_MAX_CAPTURED_EFFECTS) {
+        m_Capture.effects[m_Capture.effect_count++] = effect_num;
+    }
+}
+
+void Coop_Creatures_OnEffectDestroyed(const int16_t effect_num)
+{
+    if (m_Capture.item_num == NO_ITEM) {
+        return;
+    }
+    for (int32_t i = 0; i < m_Capture.effect_count; i++) {
+        if (m_Capture.effects[i] == effect_num) {
+            m_Capture.effects[i] = NO_EFFECT;
+        }
+    }
+}
+
+void Coop_Creatures_OnSound(
+    const SAMPLE_SLOT slot, const XYZ_32 *const pos, const uint32_t flags)
+{
+    if (m_Capture.item_num == NO_ITEM) {
+        return;
+    }
+    M_EnsureFrameEvents();
+    if (m_Capture.frame_sounds->count >= M_MAX_FRAME_SOUNDS) {
+        return;
+    }
+    const ITEM *const item = Item_Get(m_Capture.item_num);
+    const COOP_SOUND_RECORD record = {
+        .slot = slot,
+        .flags = flags,
+        .item_num = pos == &item->pos ? m_Capture.item_num : NO_ITEM,
+        .has_pos = pos != nullptr,
+        .pos = pos != nullptr ? *pos : (XYZ_32) {},
+    };
+    Vector_Add(m_Capture.frame_sounds, &record);
+}
+
+void Coop_Creatures_TakeEvents(VECTOR *const effects, VECTOR *const sounds)
+{
+    Vector_Clear(effects);
+    Vector_Clear(sounds);
+    if (m_Capture.frame_effects == nullptr) {
+        return;
+    }
+    for (int32_t i = 0; i < m_Capture.frame_effects->count; i++) {
+        Vector_Add(effects, Vector_Get(m_Capture.frame_effects, i));
+    }
+    for (int32_t i = 0; i < m_Capture.frame_sounds->count; i++) {
+        Vector_Add(sounds, Vector_Get(m_Capture.frame_sounds, i));
+    }
+    Vector_Clear(m_Capture.frame_effects);
+    Vector_Clear(m_Capture.frame_sounds);
+}
+
+void Coop_Creatures_PlayEffect(const COOP_EFFECT_RECORD *const record)
+{
+    if (!m_Creatures.known || record->room_num < 0
+        || record->room_num >= Room_GetCount() || record->object_id < 0
+        || record->object_id >= Object_GetCount()
+        || record->object_id == O_BODY_PART
+        || !Object_Get(record->object_id)->loaded) {
+        return;
+    }
+    const int16_t effect_num =
+        Effect_Create(record->object_id, record->room_num);
+    if (effect_num == NO_EFFECT) {
+        return;
+    }
+    EFFECT *const effect = Effect_Get(effect_num);
+    effect->pos = record->pos;
+    effect->rot = record->rot;
+    effect->speed = record->speed;
+    effect->fall_speed = record->fall_speed;
+    effect->frame_num = record->frame_num;
+    effect->counter = record->counter;
+    effect->shade = record->shade;
+    effect->flag1 = record->flag1;
+    effect->flag2 = record->flag2;
+}
+
+void Coop_Creatures_PlaySound(const COOP_SOUND_RECORD *const record)
+{
+    if (!m_Creatures.known) {
+        return;
+    }
+    // A sound on the creature follows it here too; one from a place stays
+    // there, the sound keeping its own copy of where.
+    if (record->item_num != NO_ITEM
+        && Coop_Creatures_IsShared(record->item_num)) {
+        Sound_EffectBySlot(
+            record->slot, &Item_Get(record->item_num)->pos, record->flags);
+    } else if (record->has_pos) {
+        const XYZ_32 pos = record->pos;
+        Sound_EffectBySlot(record->slot, &pos, record->flags | SPM_STATIC_POS);
+    } else {
+        Sound_EffectBySlot(record->slot, nullptr, record->flags);
+    }
 }

@@ -4,6 +4,7 @@
 #include <trx/core/vector.h>
 #include <trx/game/items/enum.h>
 #include <trx/game/items/types.h>
+#include <trx/game/sound/ids.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,6 +35,33 @@ typedef struct {
     uint32_t mesh_bits;
     int16_t joints[4];
 } COOP_CREATURE_RECORD;
+
+// What a creature set off on the host as it ran: an effect, such as the blood
+// of a bite, a shot's flash or a dart on its way, as it stood once the
+// creature was through for the frame.
+typedef struct {
+    int16_t object_id;
+    int16_t room_num;
+    XYZ_32 pos;
+    XYZ_16 rot;
+    int16_t speed;
+    int16_t fall_speed;
+    int16_t frame_num;
+    int16_t counter;
+    int16_t shade;
+    int32_t flag1;
+    int32_t flag2;
+} COOP_EFFECT_RECORD;
+
+// And a sound, from the creature itself where it follows it about, or from a
+// place.
+typedef struct {
+    int32_t slot;
+    uint32_t flags;
+    int16_t item_num; // NO_ITEM for a sound not on the creature
+    bool has_pos;
+    XYZ_32 pos;
+} COOP_SOUND_RECORD;
 
 // Forget the level. Called as it unloads.
 void Coop_Creatures_Reset(void);
@@ -76,3 +104,18 @@ int32_t Coop_Creatures_GetStandInSlot(void);
 // creatures stop going after. Forgotten with the level.
 void Coop_Creatures_SetLaraAway(bool away);
 bool Coop_Creatures_IsLaraAway(void);
+
+// On the host, while a creature runs: the effects it makes and ends, and the
+// sounds it plays, to be told to the others.
+void Coop_Creatures_OnEffectCreated(int16_t effect_num);
+void Coop_Creatures_OnEffectDestroyed(int16_t effect_num);
+void Coop_Creatures_OnSound(
+    SAMPLE_SLOT slot, const XYZ_32 *pos, uint32_t flags);
+// On the host, each logic frame: what the creatures set off since the last
+// call, into `effects` and `sounds`, both cleared first.
+void Coop_Creatures_TakeEvents(VECTOR *effects, VECTOR *sounds);
+
+// On a client: set off what a creature set off on the host. The effects then
+// run here as anywhere, a dart striking Lara here included.
+void Coop_Creatures_PlayEffect(const COOP_EFFECT_RECORD *record);
+void Coop_Creatures_PlaySound(const COOP_SOUND_RECORD *record);

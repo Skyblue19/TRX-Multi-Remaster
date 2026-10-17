@@ -32,7 +32,7 @@
 
 // Bumped whenever a packet changes shape. A peer on another version is turned
 // away when it connects, rather than misreading every packet after.
-#define M_PROTOCOL_VERSION 12
+#define M_PROTOCOL_VERSION 14
 #define M_CHANNEL_COUNT 2
 // Player states: unreliable, as each one replaces the last.
 #define M_CHANNEL_STATE 0
@@ -95,7 +95,12 @@ typedef enum {
     M_PACKET_DAMAGE = 15,
     // A client's trigger waking a creature, to the host.
     M_PACKET_ACTIVATE = 16,
+    // What the host's creatures set off this frame: effects and sounds.
+    M_PACKET_CREATURE_EVENTS = 17,
 } M_PACKET_TYPE;
+
+// level, how many effects, how many sounds
+#define M_CREATURE_EVENTS_HEADER_SIZE (M_HEADER_SIZE + 4 + 1 + 1)
 
 // level, the host's frame, how many records
 #define M_CREATURES_HEADER_SIZE (M_HEADER_SIZE + 4 + 4 + 1)
@@ -229,6 +234,8 @@ static struct {
     // On the host, the creatures to send this frame.
     VECTOR *creatures_moving;
     VECTOR *creatures_changed;
+    VECTOR *creature_effects;
+    VECTOR *creature_sounds;
     // On a client, the blows the host passed on, to take in play.
     int32_t damage_pending;
     bool damage_hit_status;
@@ -867,6 +874,64 @@ static void M_ReceiveCreatures(const ENetPacket *const packet)
     }
 }
 
+static void M_SendCreatureEvents(
+    ENetPeer *const peer, const int32_t level_num)
+{
+    const VECTOR *const effects = m_Net.creature_effects;
+    const VECTOR *const sounds = m_Net.creature_sounds;
+    if (!M_IsPeerConnected(peer)
+        || (effects->count == 0 && sounds->count == 0)) {
+        return;
+    }
+    const size_t size = M_CREATURE_EVENTS_HEADER_SIZE
+        + effects->count * COOP_WIRE_EFFECT_RECORD_SIZE
+        + sounds->count * COOP_WIRE_SOUND_RECORD_SIZE;
+    ENetPacket *const packet =
+        enet_packet_create(nullptr, size, ENET_PACKET_FLAG_RELIABLE);
+    uint8_t *cursor = packet->data;
+    M_PutHeader(&cursor, M_PACKET_CREATURE_EVENTS);
+    Coop_Wire_PutS32(&cursor, level_num);
+    Coop_Wire_PutU8(&cursor, (uint8_t)effects->count);
+    Coop_Wire_PutU8(&cursor, (uint8_t)sounds->count);
+    for (int32_t i = 0; i < effects->count; i++) {
+        Coop_Wire_PutEffectRecord(&cursor, Vector_Get(effects, i));
+    }
+    for (int32_t i = 0; i < sounds->count; i++) {
+        Coop_Wire_PutSoundRecord(&cursor, Vector_Get(sounds, i));
+    }
+    ASSERT(cursor == packet->data + size);
+    enet_peer_send(peer, M_CHANNEL_RELIABLE, packet);
+}
+
+static void M_ReceiveCreatureEvents(const ENetPacket *const packet)
+{
+    if (M_IsHost() || packet->dataLength < M_CREATURE_EVENTS_HEADER_SIZE) {
+        return;
+    }
+    const uint8_t *cursor = packet->data + M_HEADER_SIZE;
+    const int32_t level_num = Coop_Wire_GetS32(&cursor);
+    const int32_t effect_count = Coop_Wire_GetU8(&cursor);
+    const int32_t sound_count = Coop_Wire_GetU8(&cursor);
+    const size_t expected = M_CREATURE_EVENTS_HEADER_SIZE
+        + effect_count * COOP_WIRE_EFFECT_RECORD_SIZE
+        + sound_count * COOP_WIRE_SOUND_RECORD_SIZE;
+    // Only into a level in play: a menu in front has nothing to show them.
+    if (packet->dataLength != expected || level_num != M_GetLevelNum()
+        || !Game_IsPlaying()) {
+        return;
+    }
+    for (int32_t i = 0; i < effect_count; i++) {
+        COOP_EFFECT_RECORD record;
+        Coop_Wire_GetEffectRecord(&cursor, &record);
+        Coop_Creatures_PlayEffect(&record);
+    }
+    for (int32_t i = 0; i < sound_count; i++) {
+        COOP_SOUND_RECORD record;
+        Coop_Wire_GetSoundRecord(&cursor, &record);
+        Coop_Creatures_PlaySound(&record);
+    }
+}
+
 // The host runs the creatures and tells the others; a client puts them where
 // it is told.
 static void M_SyncCreatures(const int32_t level_num)
@@ -876,6 +941,7 @@ static void M_SyncCreatures(const int32_t level_num)
         return;
     }
     Coop_Creatures_Take(m_Net.creatures_moving, m_Net.creatures_changed);
+    Coop_Creatures_TakeEvents(m_Net.creature_effects, m_Net.creature_sounds);
     for (int32_t i = 0; i < M_MAX_PLAYERS; i++) {
         const M_PLAYER *const player = &m_Net.players[i];
         if (i == M_HOST_INDEX || !player->connected || !player->has_state
@@ -884,6 +950,7 @@ static void M_SyncCreatures(const int32_t level_num)
         }
         M_SendCreatures(player->peer, level_num, m_Net.creatures_changed, true);
         M_SendCreatures(player->peer, level_num, m_Net.creatures_moving, false);
+        M_SendCreatureEvents(player->peer, level_num);
     }
 }
 
@@ -1900,6 +1967,8 @@ static bool M_Start(const M_ROLE role, const char *const address)
     m_Net.world_taken = Vector_Create(sizeof(COOP_ITEM_RECORD));
     m_Net.creatures_moving = Vector_Create(sizeof(COOP_CREATURE_RECORD));
     m_Net.creatures_changed = Vector_Create(sizeof(COOP_CREATURE_RECORD));
+    m_Net.creature_effects = Vector_Create(sizeof(COOP_EFFECT_RECORD));
+    m_Net.creature_sounds = Vector_Create(sizeof(COOP_SOUND_RECORD));
     M_SetUpLocalPlayer();
 
     const uint16_t port = M_GetPort();
@@ -2048,6 +2117,9 @@ static void M_OnReceive(ENetPeer *const peer, const ENetPacket *const packet)
         break;
     case M_PACKET_ACTIVATE:
         M_ReceiveActivate(packet);
+        break;
+    case M_PACKET_CREATURE_EVENTS:
+        M_ReceiveCreatureEvents(packet);
         break;
     default:
         break;
@@ -2373,6 +2445,12 @@ static void M_Shutdown(void)
     }
     if (m_Net.creatures_changed != nullptr) {
         Vector_Free(m_Net.creatures_changed);
+    }
+    if (m_Net.creature_effects != nullptr) {
+        Vector_Free(m_Net.creature_effects);
+    }
+    if (m_Net.creature_sounds != nullptr) {
+        Vector_Free(m_Net.creature_sounds);
     }
     if (m_Net.host != nullptr) {
         // A host going ends the game for everyone, even one that never

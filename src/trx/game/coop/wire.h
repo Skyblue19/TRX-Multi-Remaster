@@ -32,6 +32,11 @@
 #define COOP_WIRE_CREATURE_RECORD_SIZE                                         \
     (2 + 2 + 1 + 2 * 2 + 2 + 2 + 2 + 2 + 3 * 4 + COOP_WIRE_XYZ_16_SIZE + 4     \
      + 4 * 2)
+// object, room, pos, rot, speed, fall speed, frame, counter, shade, two flags
+#define COOP_WIRE_EFFECT_RECORD_SIZE                                           \
+    (2 + 2 + 3 * 4 + COOP_WIRE_XYZ_16_SIZE + 5 * 2 + 2 * 4)
+// slot, flags, item, whether placed, pos
+#define COOP_WIRE_SOUND_RECORD_SIZE (4 + 4 + 2 + 1 + 3 * 4)
 // groups, one-shot slots, a mask per slot
 #define COOP_WIRE_FLIP_SIZE (2 + 2 + MAX_FLIP_MAPS)
 
@@ -56,6 +61,15 @@ void Coop_Wire_PutCreatureRecord(
     uint8_t **cursor, const COOP_CREATURE_RECORD *record);
 void Coop_Wire_GetCreatureRecord(
     const uint8_t **cursor, COOP_CREATURE_RECORD *record);
+
+void Coop_Wire_PutEffectRecord(
+    uint8_t **cursor, const COOP_EFFECT_RECORD *record);
+void Coop_Wire_GetEffectRecord(
+    const uint8_t **cursor, COOP_EFFECT_RECORD *record);
+void Coop_Wire_PutSoundRecord(
+    uint8_t **cursor, const COOP_SOUND_RECORD *record);
+void Coop_Wire_GetSoundRecord(
+    const uint8_t **cursor, COOP_SOUND_RECORD *record);
 
 void Coop_Wire_PutFlip(uint8_t **cursor, const COOP_FLIP_RECORD *record);
 void Coop_Wire_GetFlip(const uint8_t **cursor, COOP_FLIP_RECORD *record);

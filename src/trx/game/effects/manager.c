@@ -1,5 +1,6 @@
 #include <trx/game/effects/manager.h>
 
+#include <trx/game/coop/creatures.h>
 #include <trx/game/effects/const.h>
 #include <trx/game/game_buf.h>
 #include <trx/game/objects.h>
@@ -131,6 +132,7 @@ int16_t Effect_Create(const OBJECT_ID object_id, const int16_t room_num)
     effect->flag1 = 0;
     effect->flag2 = 0;
     effect->interp.is_new = true;
+    Coop_Creatures_OnEffectCreated(effect_num);
 
     const OBJECT *const obj = Object_Get(object_id);
     if (obj->effect_initialise_func != nullptr) {
@@ -155,6 +157,7 @@ void *Effect_AllocPriv(const int16_t effect_num, const size_t size)
 void Effect_Destroy(const int16_t effect_num)
 {
     EFFECT *const effect = Effect_Get(effect_num);
+    Coop_Creatures_OnEffectDestroyed(effect_num);
     Sparks_DetachEffect(effect_num);
     M_RemoveActive(effect_num);
     M_RemoveDrawn(effect_num);

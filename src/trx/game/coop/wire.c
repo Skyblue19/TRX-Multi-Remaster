@@ -235,3 +235,70 @@ void Coop_Wire_GetCreatureRecord(
         record->joints[i] = Coop_Wire_GetS16(cursor);
     }
 }
+
+static void M_PutXYZ32(uint8_t **const cursor, const XYZ_32 value)
+{
+    Coop_Wire_PutS32(cursor, value.x);
+    Coop_Wire_PutS32(cursor, value.y);
+    Coop_Wire_PutS32(cursor, value.z);
+}
+
+static XYZ_32 M_GetXYZ32(const uint8_t **const cursor)
+{
+    const int32_t x = Coop_Wire_GetS32(cursor);
+    const int32_t y = Coop_Wire_GetS32(cursor);
+    const int32_t z = Coop_Wire_GetS32(cursor);
+    return (XYZ_32) { .x = x, .y = y, .z = z };
+}
+
+void Coop_Wire_PutEffectRecord(
+    uint8_t **const cursor, const COOP_EFFECT_RECORD *const record)
+{
+    Coop_Wire_PutS16(cursor, record->object_id);
+    Coop_Wire_PutS16(cursor, record->room_num);
+    M_PutXYZ32(cursor, record->pos);
+    Coop_Wire_PutXYZ16(cursor, record->rot);
+    Coop_Wire_PutS16(cursor, record->speed);
+    Coop_Wire_PutS16(cursor, record->fall_speed);
+    Coop_Wire_PutS16(cursor, record->frame_num);
+    Coop_Wire_PutS16(cursor, record->counter);
+    Coop_Wire_PutS16(cursor, record->shade);
+    Coop_Wire_PutS32(cursor, record->flag1);
+    Coop_Wire_PutS32(cursor, record->flag2);
+}
+
+void Coop_Wire_GetEffectRecord(
+    const uint8_t **const cursor, COOP_EFFECT_RECORD *const record)
+{
+    record->object_id = Coop_Wire_GetS16(cursor);
+    record->room_num = Coop_Wire_GetS16(cursor);
+    record->pos = M_GetXYZ32(cursor);
+    record->rot = Coop_Wire_GetXYZ16(cursor);
+    record->speed = Coop_Wire_GetS16(cursor);
+    record->fall_speed = Coop_Wire_GetS16(cursor);
+    record->frame_num = Coop_Wire_GetS16(cursor);
+    record->counter = Coop_Wire_GetS16(cursor);
+    record->shade = Coop_Wire_GetS16(cursor);
+    record->flag1 = Coop_Wire_GetS32(cursor);
+    record->flag2 = Coop_Wire_GetS32(cursor);
+}
+
+void Coop_Wire_PutSoundRecord(
+    uint8_t **const cursor, const COOP_SOUND_RECORD *const record)
+{
+    Coop_Wire_PutS32(cursor, record->slot);
+    Coop_Wire_PutS32(cursor, (int32_t)record->flags);
+    Coop_Wire_PutS16(cursor, record->item_num);
+    Coop_Wire_PutU8(cursor, record->has_pos ? 1 : 0);
+    M_PutXYZ32(cursor, record->pos);
+}
+
+void Coop_Wire_GetSoundRecord(
+    const uint8_t **const cursor, COOP_SOUND_RECORD *const record)
+{
+    record->slot = Coop_Wire_GetS32(cursor);
+    record->flags = (uint32_t)Coop_Wire_GetS32(cursor);
+    record->item_num = Coop_Wire_GetS16(cursor);
+    record->has_pos = Coop_Wire_GetU8(cursor) != 0;
+    record->pos = M_GetXYZ32(cursor);
+}

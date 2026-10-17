@@ -9,6 +9,7 @@
 #include <trx/core/subsystem.h>
 #include <trx/core/utils.h>
 #include <trx/game/camera.h>
+#include <trx/game/coop/creatures.h>
 #include <trx/game/game_buf.h>
 #include <trx/game/game_flow.h>
 #include <trx/game/lara.h>
@@ -583,6 +584,7 @@ void Sound_ResetSources(void)
 int32_t Sound_EffectBySlot(
     const SAMPLE_SLOT sample_id, const XYZ_32 *const pos, const uint32_t flags)
 {
+    Coop_Creatures_OnSound(sample_id, pos, flags);
     // Without audio, a sound on the control generator still makes its draws,
     // so that the game plays out the same with or without a sound device.
     const bool is_initialised = Sound_IsInitialised();
