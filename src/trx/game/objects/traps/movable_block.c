@@ -1287,6 +1287,14 @@ void MovableBlock_SlideStack(
     Vector_Free(stack);
 }
 
+void MovableBlock_SetRotation(const int16_t item_num, const int16_t rot_y)
+{
+    ITEM *const item = Item_Get(item_num);
+    if (Object_Get(item->object_id)->control_func == M_Control) {
+        M_UpdateRotation(item, rot_y);
+    }
+}
+
 bool MovableBlock_Relocate(
     const int16_t item_num, const XYZ_32 pos, const int16_t room_num)
 {

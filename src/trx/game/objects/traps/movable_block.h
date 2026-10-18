@@ -17,6 +17,11 @@ void MovableBlock_UpdateBox(const ITEM *item, bool blocked);
 // that is no movable block or is on the move itself.
 bool MovableBlock_Relocate(int16_t item_num, XYZ_32 pos, int16_t room_num);
 
+// Turn a block to face the way another game turned it, as a player there
+// takes hold of it, its look kept as it was. Does nothing to an item that is
+// no movable block.
+void MovableBlock_SetRotation(int16_t item_num, int16_t rot_y);
+
 // Lock a stack that is about to drop.
 void MovableBlock_LockStack(XYZ_32 drop_pos, int16_t room_num);
 // Drop a stack of blocks.

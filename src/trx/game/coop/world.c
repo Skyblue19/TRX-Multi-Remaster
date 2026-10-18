@@ -12,6 +12,10 @@
 // How long a change of this game's own keeps it from being overruled by
 // another non-host game: a second of logic frames.
 #define M_RECENT_FRAMES 30
+// What a trigger held for another game is left with when that game lets go
+// while a player here stands on it too: enough to last until the trigger
+// here winds it up again next frame.
+#define M_RELEASE_TIMER 30
 // The flipped-last status rides in the top bit of the group set.
 #define M_FLIP_STATUS_BIT (1 << 15)
 static_assert(MAX_FLIP_MAPS <= 15, "flip groups must fit below the status");
@@ -38,6 +42,14 @@ static struct {
     // changed it itself.
     COOP_ITEM_RECORD *sent;
     int32_t *changed_at;
+    // Each item whose trigger another game holds for it, a player there
+    // standing on it. Such an item is that game's to speak of: this one
+    // holds it untimed, and saying so back would hold it there forever.
+    bool *held;
+    // Whether a player here stood on such a trigger as well this frame,
+    // winding its timer up: it is this game's to hold then, once the other
+    // lets go.
+    bool *refreshed;
     COOP_FLIP_RECORD sent_flip;
     int32_t flip_changed_at;
     int32_t frame;
@@ -148,9 +160,14 @@ static void M_Learn(void)
         Memory_Alloc(sizeof(COOP_ITEM_RECORD) * MAX(m_World.item_count, 1));
     m_World.changed_at =
         Memory_Alloc(sizeof(int32_t) * MAX(m_World.item_count, 1));
+    m_World.held = Memory_Alloc(sizeof(bool) * MAX(m_World.item_count, 1));
+    m_World.refreshed =
+        Memory_Alloc(sizeof(bool) * MAX(m_World.item_count, 1));
     for (int32_t i = 0; i < m_World.item_count; i++) {
         m_World.sent[i] = M_Encode(i);
         m_World.changed_at[i] = -M_RECENT_FRAMES;
+        m_World.held[i] = false;
+        m_World.refreshed[i] = false;
     }
     m_World.sent_flip = M_EncodeFlip();
     m_World.flip_changed_at = -M_RECENT_FRAMES;
@@ -198,12 +215,18 @@ static void M_ApplyState(
     // nothing new, so the timer would run out here alone, a dart trap
     // falling silent after its first dart. Held without one instead, it lets
     // go when the other game says its own ran out.
-    if ((flags & M_FLAG_TRIGGER_ACTIVE) != 0) {
-        if (item->timer > 0) {
-            item->timer = 0;
+    if ((flags & M_FLAG_TRIGGER_ACTIVE) == 0) {
+        // Let go there, it holds here still while a player here is on it.
+        if (m_World.held[item_num] && m_World.refreshed[item_num]) {
+            item->timer = M_RELEASE_TIMER;
+        } else if (Item_IsTriggerActiveRO(item)) {
+            item->timer = -1;
         }
-    } else if (Item_IsTriggerActiveRO(item)) {
-        item->timer = -1;
+        m_World.held[item_num] = false;
+        m_World.refreshed[item_num] = false;
+    } else if (record->timer > 0) {
+        m_World.held[item_num] = true;
+        item->timer = 0;
     }
     Item_SetVisible(item, (flags & M_FLAG_VISIBLE) != 0);
 
@@ -238,6 +261,8 @@ void Coop_World_Reset(void)
 {
     Memory_FreePointer(&m_World.sent);
     Memory_FreePointer(&m_World.changed_at);
+    Memory_FreePointer(&m_World.held);
+    Memory_FreePointer(&m_World.refreshed);
     m_World = (typeof(m_World)) {};
 }
 
@@ -254,6 +279,18 @@ bool Coop_World_TakeChanges(VECTOR *const items, COOP_FLIP_RECORD *const flip)
         if (!M_IsShared(i)) {
             continue;
         }
+        // Held for another game, the item is for that game to report, and
+        // stays held whoever else steps on it: a player here winding its
+        // timer up would let it run out here on leaving, with the player
+        // there still on it.
+        if (m_World.held[i]) {
+            ITEM *const held_item = Item_Get(i);
+            m_World.refreshed[i] = held_item->timer > 0;
+            if (held_item->timer > 0) {
+                held_item->timer = 0;
+            }
+            continue;
+        }
         // A block on the move says nothing until it rests.
         const ITEM *const item = Item_Get(i);
         if (M_IsPushable(item->object_id) && item->is_simulated) {
@@ -265,6 +302,8 @@ bool Coop_World_TakeChanges(VECTOR *const items, COOP_FLIP_RECORD *const flip)
         }
         m_World.sent[i] = record;
         m_World.changed_at[i] = m_World.frame;
+        if (M_IsPushable(record.object_id)) {
+        }
         Vector_Add(items, &record);
     }
 
@@ -309,12 +348,14 @@ bool Coop_World_ApplyMoving(const COOP_ITEM_RECORD *const record)
         || record->room_num < 0 || record->room_num >= Room_GetCount()) {
         return false;
     }
-    // Only seen to move: where it stands for good comes once it rests.
+    // Only seen to move: a block slides in its own animation, from where it
+    // stands until it rests, and that is where its floor goes then.
     if (item->is_present && item->room_num != record->room_num) {
         Item_UpdateRoom(item_num, record->room_num);
     }
     item->pos = record->pos;
-    item->rot = record->rot;
+    MovableBlock_SetRotation(item_num, record->rot.y);
+    M_ApplyAnim(item, record);
     return true;
 }
 
@@ -367,6 +408,9 @@ bool Coop_World_ApplyItem(
             }
             item->pos = record->pos;
         }
+        // At rest in the pose it came to rest in.
+        MovableBlock_SetRotation(item_num, record->rot.y);
+        M_ApplyAnim(item, record);
     } else if (authoritative || !M_IsRecent(m_World.changed_at[item_num])) {
         M_ApplyState(item_num, record);
     } else {
