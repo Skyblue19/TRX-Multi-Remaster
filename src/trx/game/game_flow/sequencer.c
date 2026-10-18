@@ -144,7 +144,7 @@ RESULT GF_InterpretSequence(
 
     // Before the level's opening videos, so that co-op players start the
     // level together.
-    Coop_OnLevelSequence(level);
+    Coop_OnLevelSequence(level, seq_ctx);
 
     GF_ResetLevelSetup(seq_ctx);
 

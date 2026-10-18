@@ -32,7 +32,7 @@
 
 // Bumped whenever a packet changes shape. A peer on another version is turned
 // away when it connects, rather than misreading every packet after.
-#define M_PROTOCOL_VERSION 14
+#define M_PROTOCOL_VERSION 16
 #define M_CHANNEL_COUNT 2
 // Player states: unreliable, as each one replaces the last.
 #define M_CHANNEL_STATE 0
@@ -97,7 +97,13 @@ typedef enum {
     M_PACKET_ACTIVATE = 16,
     // What the host's creatures set off this frame: effects and sounds.
     M_PACKET_CREATURE_EVENTS = 17,
+    // The blocks a game is moving, where they are this frame.
+    M_PACKET_WORLD_MOVING = 18,
 } M_PACKET_TYPE;
+
+// level, how many blocks
+#define M_WORLD_MOVING_HEADER_SIZE (M_HEADER_SIZE + 4 + 1)
+#define M_WORLD_MOVING_MAX 16
 
 // level, how many effects, how many sounds
 #define M_CREATURE_EVENTS_HEADER_SIZE (M_HEADER_SIZE + 4 + 1 + 1)
@@ -141,7 +147,8 @@ typedef enum {
 #define M_WORLD_HEADER_SIZE (M_HEADER_SIZE + 4 + 1 + 1 + 2)
 #define M_WORLD_REQUEST_SIZE (M_HEADER_SIZE + 4)
 // level, and how many times the host has loaded a level this session
-#define M_START_SIZE (M_HEADER_SIZE + 4 + 4)
+// and whether the level starts afresh, its opening shown, or is under way
+#define M_START_SIZE (M_HEADER_SIZE + 4 + 4 + 1)
 // id, name length, then the name
 #define M_IDENTITY_MIN_SIZE (COOP_ID_SIZE + 1)
 #define M_IDENTITY_MAX_SIZE (M_IDENTITY_MIN_SIZE + COOP_NAME_SIZE - 1)
@@ -231,6 +238,7 @@ static struct {
     int32_t world_request_wait;
     VECTOR *world_changes;
     VECTOR *world_taken;
+    VECTOR *world_moving;
     // On the host, the creatures to send this frame.
     VECTOR *creatures_moving;
     VECTOR *creatures_changed;
@@ -246,6 +254,10 @@ static struct {
     // save is a new start too.
     int32_t announced_level;
     int32_t load_count;
+    bool announced_fresh;
+    // On a client, whether the level it is on its way to is already under
+    // way, so that its opening videos and cutscenes are not for this game.
+    bool skip_intro;
     // On a client, the last start it heard, and whether it is on its way to
     // the level that start named.
     int32_t heard_load_count;
@@ -512,13 +524,14 @@ static void M_ReceiveRoster(const uint8_t *cursor, const uint8_t *const end)
 
 // Start ----------------------------------------------------------------------
 
-static void M_SendStart(ENetPeer *const peer)
+static void M_SendStart(ENetPeer *const peer, const bool fresh)
 {
     uint8_t data[M_START_SIZE];
     uint8_t *cursor = data;
     M_PutHeader(&cursor, M_PACKET_START);
     Coop_Wire_PutS32(&cursor, m_Net.announced_level);
     Coop_Wire_PutS32(&cursor, m_Net.load_count);
+    Coop_Wire_PutU8(&cursor, fresh ? 1 : 0);
     M_Send(
         peer, M_CHANNEL_RELIABLE, data, sizeof(data),
         ENET_PACKET_FLAG_RELIABLE);
@@ -529,18 +542,20 @@ static void M_ForgetExit(void);
 // Tells the others whenever the host comes into a level, a level loaded again
 // from a save included, so that they go where it went. Without `force`, only
 // a level other than the last one told counts.
-static void M_AnnounceLevel(const int32_t level_num, const bool force)
+static void M_AnnounceLevel(
+    const int32_t level_num, const bool force, const bool fresh)
 {
     if (!force && m_Net.announced_level == level_num) {
         return;
     }
     m_Net.announced_level = level_num;
+    m_Net.announced_fresh = fresh;
     m_Net.load_count++;
     // A new start, so nobody is at its exit yet.
     M_ForgetExit();
     for (int32_t i = 0; i < M_MAX_PLAYERS; i++) {
         if (i != M_HOST_INDEX && m_Net.players[i].connected) {
-            M_SendStart(m_Net.players[i].peer);
+            M_SendStart(m_Net.players[i].peer, fresh);
         }
     }
 }
@@ -553,10 +568,12 @@ static void M_ReceiveStart(const ENetPacket *const packet)
     const uint8_t *cursor = packet->data + M_HEADER_SIZE;
     const int32_t level_num = Coop_Wire_GetS32(&cursor);
     const int32_t load_count = Coop_Wire_GetS32(&cursor);
+    const bool fresh = Coop_Wire_GetU8(&cursor) != 0;
     if (load_count == m_Net.heard_load_count) {
         return;
     }
     m_Net.heard_load_count = load_count;
+    m_Net.skip_intro = !fresh;
     // Already on the way there, as the host announces a level both as its
     // sequence starts and as play begins.
     if (m_Net.start_pending && m_Net.pending_level == level_num) {
@@ -641,7 +658,7 @@ static void M_ReceiveHello(
     M_BroadcastRoster();
     // A player arriving mid-game goes straight to the host's level.
     if (m_Net.announced_level >= 0) {
-        M_SendStart(peer);
+        M_SendStart(peer, false);
     }
 }
 
@@ -1121,6 +1138,82 @@ static void M_ReceiveWorldRequest(
     // Behind the world on the same channel, so it lands on a level that has
     // caught up.
     M_HandBackProfile(M_GetPeerIndex(peer));
+}
+
+static void M_SendMoving(
+    ENetPeer *const peer, const int32_t level_num, const VECTOR *const items)
+{
+    if (!M_IsPeerConnected(peer) || items->count == 0) {
+        return;
+    }
+    const int32_t count = MIN(items->count, M_WORLD_MOVING_MAX);
+    const size_t size =
+        M_WORLD_MOVING_HEADER_SIZE + count * COOP_WIRE_ITEM_RECORD_SIZE;
+    ENetPacket *const packet = enet_packet_create(nullptr, size, 0);
+    uint8_t *cursor = packet->data;
+    M_PutHeader(&cursor, M_PACKET_WORLD_MOVING);
+    Coop_Wire_PutS32(&cursor, level_num);
+    Coop_Wire_PutU8(&cursor, (uint8_t)count);
+    for (int32_t i = 0; i < count; i++) {
+        Coop_Wire_PutItemRecord(&cursor, Vector_Get(items, i));
+    }
+    ASSERT(cursor == packet->data + size);
+    // Unreliable: each frame's place replaces the last.
+    enet_peer_send(peer, M_CHANNEL_STATE, packet);
+}
+
+// To every other game in the level but `except_index`'s.
+static void M_HostSendMoving(
+    const int32_t level_num, const int32_t except_index,
+    const VECTOR *const items)
+{
+    for (int32_t i = 0; i < M_MAX_PLAYERS; i++) {
+        const M_PLAYER *const player = &m_Net.players[i];
+        if (i == M_HOST_INDEX || i == except_index || !player->connected
+            || !player->has_state || player->level_num != level_num) {
+            continue;
+        }
+        M_SendMoving(player->peer, level_num, items);
+    }
+}
+
+static void M_ReceiveMoving(
+    ENetPeer *const peer, const ENetPacket *const packet)
+{
+    if (packet->dataLength < M_WORLD_MOVING_HEADER_SIZE) {
+        return;
+    }
+    const uint8_t *cursor = packet->data + M_HEADER_SIZE;
+    const int32_t level_num = Coop_Wire_GetS32(&cursor);
+    const int32_t count = Coop_Wire_GetU8(&cursor);
+    const size_t expected =
+        M_WORLD_MOVING_HEADER_SIZE + count * COOP_WIRE_ITEM_RECORD_SIZE;
+    if (packet->dataLength != expected || level_num != M_GetLevelNum()) {
+        return;
+    }
+    Vector_Clear(m_Net.world_moving);
+    for (int32_t i = 0; i < count; i++) {
+        COOP_ITEM_RECORD record;
+        Coop_Wire_GetItemRecord(&cursor, &record);
+        if (Coop_World_ApplyMoving(&record)) {
+            Vector_Add(m_Net.world_moving, &record);
+        }
+    }
+    if (M_IsHost()) {
+        M_HostSendMoving(level_num, M_GetPeerIndex(peer), m_Net.world_moving);
+    }
+    Vector_Clear(m_Net.world_moving);
+}
+
+static void M_SyncMoving(const int32_t level_num)
+{
+    Coop_World_TakeMoving(m_Net.world_moving);
+    if (M_IsHost()) {
+        M_HostSendMoving(level_num, -1, m_Net.world_moving);
+    } else if (m_Net.world_synced) {
+        M_SendMoving(m_Net.host_peer, level_num, m_Net.world_moving);
+    }
+    Vector_Clear(m_Net.world_moving);
 }
 
 static void M_SyncWorld(const int32_t level_num)
@@ -1965,6 +2058,7 @@ static bool M_Start(const M_ROLE role, const char *const address)
     m_Net.role = role;
     m_Net.world_changes = Vector_Create(sizeof(COOP_ITEM_RECORD));
     m_Net.world_taken = Vector_Create(sizeof(COOP_ITEM_RECORD));
+    m_Net.world_moving = Vector_Create(sizeof(COOP_ITEM_RECORD));
     m_Net.creatures_moving = Vector_Create(sizeof(COOP_CREATURE_RECORD));
     m_Net.creatures_changed = Vector_Create(sizeof(COOP_CREATURE_RECORD));
     m_Net.creature_effects = Vector_Create(sizeof(COOP_EFFECT_RECORD));
@@ -2120,6 +2214,9 @@ static void M_OnReceive(ENetPeer *const peer, const ENetPacket *const packet)
         break;
     case M_PACKET_CREATURE_EVENTS:
         M_ReceiveCreatureEvents(packet);
+        break;
+    case M_PACKET_WORLD_MOVING:
+        M_ReceiveMoving(peer, packet);
         break;
     default:
         break;
@@ -2362,14 +2459,16 @@ void Coop_Net_Control(void)
     if (M_IsHost()) {
         // Normally told as the level's sequence starts; this catches a level
         // reached any other way.
-        M_AnnounceLevel(level_num, false);
+        M_AnnounceLevel(level_num, false, true);
     } else {
         m_Net.start_pending = false;
+        m_Net.skip_intro = false;
     }
     M_ApplyRevive();
     M_ApplyDamage();
     M_SendLocalState(level_num);
     M_SyncWorld(level_num);
+    M_SyncMoving(level_num);
     M_SyncCreatures(level_num);
     M_SyncProfile();
     M_WatchDeaths(level_num);
@@ -2413,12 +2512,17 @@ void Coop_Net_OnLevelUnload(void)
     M_ForgetExit();
 }
 
-void Coop_Net_OnLevelSequence(const int32_t level_num)
+void Coop_Net_OnLevelSequence(const int32_t level_num, const bool fresh)
 {
     if (M_IsHost() && m_Net.host != nullptr) {
-        M_AnnounceLevel(level_num, true);
+        M_AnnounceLevel(level_num, true, fresh);
         enet_host_flush(m_Net.host);
     }
+}
+
+bool Coop_Net_SkipsIntro(void)
+{
+    return m_Net.host != nullptr && !M_IsHost() && m_Net.skip_intro;
 }
 
 bool Coop_Net_IsStartPending(void)
@@ -2439,6 +2543,9 @@ static void M_Shutdown(void)
     }
     if (m_Net.world_taken != nullptr) {
         Vector_Free(m_Net.world_taken);
+    }
+    if (m_Net.world_moving != nullptr) {
+        Vector_Free(m_Net.world_moving);
     }
     if (m_Net.creatures_moving != nullptr) {
         Vector_Free(m_Net.creatures_moving);

@@ -227,17 +227,23 @@ bool Coop_ReviveWithMedipack(const int32_t number)
     return true;
 }
 
-void Coop_OnLevelSequence(const GF_LEVEL *const level)
+void Coop_OnLevelSequence(
+    const GF_LEVEL *const level, const GF_SEQUENCE_CONTEXT seq_ctx)
 {
     switch (level->type) {
     case GFL_NORMAL:
     case GFL_GYM:
     case GFL_BONUS:
-        Coop_Net_OnLevelSequence(level->num);
+        Coop_Net_OnLevelSequence(level->num, seq_ctx != GFSC_SAVED);
         break;
     default:
         break;
     }
+}
+
+bool Coop_SkipsLevelIntro(void)
+{
+    return Coop_Net_SkipsIntro();
 }
 
 void Coop_OnTitle(void)

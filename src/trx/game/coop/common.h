@@ -91,7 +91,11 @@ bool Coop_ReviveWithMedipack(int32_t number);
 
 // A level's sequence is starting, opening videos and all. The host tells the
 // others to start it too.
-void Coop_OnLevelSequence(const GF_LEVEL *level);
+void Coop_OnLevelSequence(const GF_LEVEL *level, GF_SEQUENCE_CONTEXT seq_ctx);
+
+// Whether this game is joining a level the host has under way, without the
+// videos, cutscenes and pictures that open it.
+bool Coop_SkipsLevelIntro(void);
 
 // The game is going back to the title, which a player who played leaves the
 // session from.

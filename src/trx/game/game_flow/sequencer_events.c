@@ -5,6 +5,7 @@
 #include <trx/core/memory.h>
 #include <trx/debug.h>
 #include <trx/game/const.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/fmv.h>
 #include <trx/game/game.h>
 #include <trx/game/game_flow/common.h>
@@ -236,7 +237,8 @@ M_GF_HANDLER(M_HandlePlayCutscene)
     const int16_t cutscene_num = (int16_t)(intptr_t)event->data;
     const bool cross_fade_in =
         prev_event != nullptr && prev_event->type == GFS_LOOP_GAME;
-    if (seq_ctx != GFSC_SAVED && g_Config.gameplay.enable_cutscenes) {
+    if (seq_ctx != GFSC_SAVED && g_Config.gameplay.enable_cutscenes
+        && !Coop_SkipsLevelIntro()) {
         MUST(GF_DoCutsceneSequence(cutscene_num, cross_fade_in, &gf_cmd));
         if (gf_cmd.action == GF_LEVEL_COMPLETE) {
             gf_cmd.action = GF_NOOP;
@@ -251,7 +253,7 @@ M_GF_HANDLER(M_HandlePlayFMV)
     GF_COMMAND gf_cmd = { .action = GF_NOOP };
     const GF_SEQUENCE_EVENT *const event = &sequence->events[event_idx];
     const int16_t fmv_id = (int16_t)(intptr_t)event->data;
-    if (seq_ctx == GFSC_SAVED) {
+    if (seq_ctx == GFSC_SAVED || Coop_SkipsLevelIntro()) {
         *out_cmd = gf_cmd;
         return OK;
     }
@@ -314,7 +316,7 @@ M_GF_HANDLER(M_HandlePicture)
             return OK;
         }
         Music_Stop();
-    } else if (seq_ctx == GFSC_SAVED) {
+    } else if (seq_ctx == GFSC_SAVED || Coop_SkipsLevelIntro()) {
         *out_cmd = gf_cmd;
         return OK;
     }

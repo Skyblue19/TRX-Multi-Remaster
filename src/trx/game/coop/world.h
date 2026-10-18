@@ -48,6 +48,13 @@ void Coop_World_Reset(void);
 // The first call in a level takes nothing: it only learns the level as it is.
 bool Coop_World_TakeChanges(VECTOR *items, COOP_FLIP_RECORD *flip);
 
+// The blocks this game is moving now, as records into `items` (cleared first),
+// to be shown moving in the other games every frame.
+void Coop_World_TakeMoving(VECTOR *items);
+// Show a block another game is moving where it is now. Returns whether the
+// record was taken, which is what the host passes on.
+bool Coop_World_ApplyMoving(const COOP_ITEM_RECORD *record);
+
 // The whole level, for a player who has to catch up with it.
 void Coop_World_GetAll(VECTOR *items, COOP_FLIP_RECORD *flip);
 

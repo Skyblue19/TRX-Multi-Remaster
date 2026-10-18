@@ -12,6 +12,11 @@ bool MovableBlock_TestSquareClaimed(XYZ_32 pos);
 // Block or unblock a block's box overlap index.
 void MovableBlock_UpdateBox(const ITEM *item, bool blocked);
 
+// Move a block at rest to where another game left it, the floor it makes and
+// the box it blocks going with it. Returns false, moving nothing, for an item
+// that is no movable block or is on the move itself.
+bool MovableBlock_Relocate(int16_t item_num, XYZ_32 pos, int16_t room_num);
+
 // Lock a stack that is about to drop.
 void MovableBlock_LockStack(XYZ_32 drop_pos, int16_t room_num);
 // Drop a stack of blocks.

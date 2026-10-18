@@ -1287,6 +1287,41 @@ void MovableBlock_SlideStack(
     Vector_Free(stack);
 }
 
+bool MovableBlock_Relocate(
+    const int16_t item_num, const XYZ_32 pos, const int16_t room_num)
+{
+    ITEM *const item = Item_Get(item_num);
+    if (Object_Get(item->object_id)->control_func != M_Control
+        || item->is_simulated) {
+        return false;
+    }
+    // Shown moving meanwhile, the block may stand there already: where it
+    // rested is what its floor and box still follow.
+    const GAME_VECTOR linked = M_GetLinked(item);
+    item->pos = linked.pos;
+    if (linked.pos.x == pos.x && linked.pos.y == pos.y && linked.pos.z == pos.z
+        && linked.room_num == room_num) {
+        if (item->room_num != room_num) {
+            Item_UpdateRoom(item_num, room_num);
+        }
+        return true;
+    }
+
+    MovableBlock_UpdateBox(item, false);
+    item->pos = pos;
+    if (item->room_num != room_num) {
+        Item_UpdateRoom(item_num, room_num);
+    }
+    const GAME_VECTOR target = {
+        .pos = item->pos,
+        .room_num = item->room_num,
+    };
+    Walkable_Reposition(item_num, linked, target);
+    M_SetLinked(item);
+    MovableBlock_UpdateBox(item, true);
+    return true;
+}
+
 REGISTER_OBJECT(O_MOVABLE_BLOCK_1, M_Setup)
 REGISTER_OBJECT(O_MOVABLE_BLOCK_2, M_Setup)
 REGISTER_OBJECT(O_MOVABLE_BLOCK_3, M_Setup)

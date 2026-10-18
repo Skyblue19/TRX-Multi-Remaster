@@ -5,6 +5,8 @@
 #include <trx/game/items.h>
 #include <trx/game/lara.h>
 #include <trx/game/objects.h>
+#include <trx/game/objects/families.h>
+#include <trx/game/objects/traps/movable_block.h>
 #include <trx/game/rooms.h>
 
 // How long a change of this game's own keeps it from being overruled by
@@ -23,6 +25,9 @@ typedef enum {
     M_FLAG_TRIGGER_SPENT = 1 << 5,
     M_FLAG_TRIGGER_SWITCH_SPENT = 1 << 6,
     M_FLAG_TRIGGER_ANTI_SPENT = 1 << 7,
+    // Whether its trigger holds it active now. A trigger on a timer runs out
+    // in a game whose player is not on it, unless told it still holds.
+    M_FLAG_TRIGGER_ACTIVE = 1 << 8,
 } M_FLAG;
 
 static struct {
@@ -64,6 +69,7 @@ static COOP_ITEM_RECORD M_Encode(const int16_t item_num)
     flags |= item->trigger.spent ? M_FLAG_TRIGGER_SPENT : 0;
     flags |= item->trigger.switch_spent ? M_FLAG_TRIGGER_SWITCH_SPENT : 0;
     flags |= item->trigger.anti_spent ? M_FLAG_TRIGGER_ANTI_SPENT : 0;
+    flags |= Item_IsTriggerActiveRO(item) ? M_FLAG_TRIGGER_ACTIVE : 0;
     return (COOP_ITEM_RECORD) {
         .item_num = item_num,
         .object_id = item->object_id,
@@ -81,11 +87,26 @@ static COOP_ITEM_RECORD M_Encode(const int16_t item_num)
     };
 }
 
+// A block someone pushes is theirs until it comes to rest: only where it
+// rests counts, and the game moving it keeps it meanwhile.
+static bool M_IsPushable(const int16_t object_id)
+{
+    return ObjectFamily_Has(object_id, OBJ_FAMILY_PUSHABLE);
+}
+
+#define M_PUSHABLE_FLAGS (M_FLAG_VISIBLE | M_FLAG_DESTROYED)
+
 // Only the discrete state counts as a change. An item mid-animation moves and
 // counts down every frame, and saying so every frame would drown the rest.
 static bool M_IsSameState(
     const COOP_ITEM_RECORD *const a, const COOP_ITEM_RECORD *const b)
 {
+    if (M_IsPushable(a->object_id)) {
+        return a->object_id == b->object_id
+            && (a->flags & M_PUSHABLE_FLAGS) == (b->flags & M_PUSHABLE_FLAGS)
+            && a->room_num == b->room_num && a->pos.x == b->pos.x
+            && a->pos.y == b->pos.y && a->pos.z == b->pos.z;
+    }
     return a->object_id == b->object_id && a->flags == b->flags
         && a->trigger_mask == b->trigger_mask
         && a->current_anim_state == b->current_anim_state
@@ -172,13 +193,33 @@ static void M_ApplyState(
     item->trigger.anti_spent = (flags & M_FLAG_TRIGGER_ANTI_SPENT) != 0;
     item->is_finished = (flags & M_FLAG_FINISHED) != 0;
     item->timer = record->timer;
+    // The trigger holds as long as it does where it was set off. There a
+    // player standing on it winds its timer back up every frame, which says
+    // nothing new, so the timer would run out here alone, a dart trap
+    // falling silent after its first dart. Held without one instead, it lets
+    // go when the other game says its own ran out.
+    if ((flags & M_FLAG_TRIGGER_ACTIVE) != 0) {
+        if (item->timer > 0) {
+            item->timer = 0;
+        }
+    } else if (Item_IsTriggerActiveRO(item)) {
+        item->timer = -1;
+    }
     Item_SetVisible(item, (flags & M_FLAG_VISIBLE) != 0);
 
     const bool simulated = (flags & M_FLAG_SIMULATED) != 0;
+    const bool runs_here = item->is_simulated;
     if (simulated && !item->is_simulated) {
         Item_AddSimulated(item_num);
     } else if (!simulated && item->is_simulated) {
         Item_RemoveSimulated(item_num);
+    }
+
+    // Running here as well, the item plays out the same triggers on its own.
+    // Its pose, which the other game reports a frame on, would only set it
+    // back: a dart trap made to skip the frame it fires on never fires.
+    if (simulated && runs_here) {
+        return;
     }
 
     M_ApplyAnim(item, record);
@@ -213,6 +254,11 @@ bool Coop_World_TakeChanges(VECTOR *const items, COOP_FLIP_RECORD *const flip)
         if (!M_IsShared(i)) {
             continue;
         }
+        // A block on the move says nothing until it rests.
+        const ITEM *const item = Item_Get(i);
+        if (M_IsPushable(item->object_id) && item->is_simulated) {
+            continue;
+        }
         const COOP_ITEM_RECORD record = M_Encode(i);
         if (M_IsSameState(&record, &m_World.sent[i])) {
             continue;
@@ -229,6 +275,46 @@ bool Coop_World_TakeChanges(VECTOR *const items, COOP_FLIP_RECORD *const flip)
     m_World.sent_flip = current_flip;
     m_World.flip_changed_at = m_World.frame;
     *flip = current_flip;
+    return true;
+}
+
+void Coop_World_TakeMoving(VECTOR *const items)
+{
+    Vector_Clear(items);
+    if (!m_World.known) {
+        return;
+    }
+    for (int16_t i = 0; i < m_World.item_count; i++) {
+        const ITEM *const item = Item_Get(i);
+        if (M_IsShared(i) && M_IsPushable(item->object_id)
+            && item->is_simulated) {
+            const COOP_ITEM_RECORD record = M_Encode(i);
+            Vector_Add(items, &record);
+        }
+    }
+}
+
+bool Coop_World_ApplyMoving(const COOP_ITEM_RECORD *const record)
+{
+    if (!m_World.known) {
+        return false;
+    }
+    const int16_t item_num = record->item_num;
+    if (!M_IsShared(item_num)) {
+        return false;
+    }
+    ITEM *const item = Item_Get(item_num);
+    if (item->object_id != record->object_id || item->is_destroyed
+        || !M_IsPushable(item->object_id) || item->is_simulated
+        || record->room_num < 0 || record->room_num >= Room_GetCount()) {
+        return false;
+    }
+    // Only seen to move: where it stands for good comes once it rests.
+    if (item->is_present && item->room_num != record->room_num) {
+        Item_UpdateRoom(item_num, record->room_num);
+    }
+    item->pos = record->pos;
+    item->rot = record->rot;
     return true;
 }
 
@@ -266,6 +352,21 @@ bool Coop_World_ApplyItem(
     // A pickup taken is gone for everyone, whoever saw it last.
     if ((record->flags & M_FLAG_DESTROYED) != 0) {
         Item_Destroy(item_num);
+    } else if (M_IsPushable(item->object_id)) {
+        // Where another game left its block, unless this game is moving it.
+        if (item->is_simulated) {
+            return false;
+        }
+        Item_SetVisible(item, (record->flags & M_FLAG_VISIBLE) != 0);
+        if (record->room_num < 0 || record->room_num >= Room_GetCount()) {
+            return false;
+        }
+        if (!MovableBlock_Relocate(item_num, record->pos, record->room_num)) {
+            if (item->room_num != record->room_num) {
+                Item_UpdateRoom(item_num, record->room_num);
+            }
+            item->pos = record->pos;
+        }
     } else if (authoritative || !M_IsRecent(m_World.changed_at[item_num])) {
         M_ApplyState(item_num, record);
     } else {

@@ -67,8 +67,12 @@ void Coop_Net_OnLevelUnload(void);
 
 // A playable level's sequence is starting here. On the host, the others are
 // told to start it too, even when it is the level they are in, as the host
-// may be loading it afresh from a save.
-void Coop_Net_OnLevelSequence(int32_t level_num);
+// may be loading it afresh from a save. A level that is not `fresh`, as one
+// loaded from a save, is joined without its opening.
+void Coop_Net_OnLevelSequence(int32_t level_num, bool fresh);
+// Whether a client is on its way into a level the host has under way, which
+// it joins without the level's opening.
+bool Coop_Net_SkipsIntro(void);
 
 // The game went back to the title, which leaves the session: a client sends
 // its last profile and goes, a host tells everyone the game is over.
