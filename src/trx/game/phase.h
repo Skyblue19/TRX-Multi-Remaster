@@ -2,6 +2,7 @@
 
 #include <trx/game/phase/control.h>
 #include <trx/game/phase/executor.h>
+#include <trx/game/phase/phase_coop_wait.h>
 #include <trx/game/phase/phase_cutscene.h>
 #include <trx/game/phase/phase_demo.h>
 #include <trx/game/phase/phase_game.h>

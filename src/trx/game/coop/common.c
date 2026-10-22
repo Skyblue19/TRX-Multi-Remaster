@@ -6,10 +6,15 @@
 #include <trx/game/coop/puppet.h>
 #include <trx/game/coop/world.h>
 #include <trx/game/game.h>
+#include <trx/game/game/control.h>
 #include <trx/game/game_flow.h>
+#include <trx/game/input.h>
+#include <trx/game/interpolation.h>
 #include <trx/game/inventory.h>
 #include <trx/game/items.h>
 #include <trx/game/lara.h>
+#include <trx/game/lara/control.h>
+#include <trx/game/lara/hair.h>
 #include <trx/game/objects.h>
 #include <trx/game/sound.h>
 #include <trx/game/stats.h>
@@ -41,11 +46,52 @@ bool Coop_IsPlayableLevel(void)
     }
 }
 
+// Whether a menu, the pause or the photo mode covers the level being played.
+static bool m_GameCovered = false;
+
+void Coop_SetGameCovered(const bool covered)
+{
+    m_GameCovered = covered;
+}
+
+bool Coop_ShowsLiveBackground(void)
+{
+    return m_GameCovered && Coop_Net_IsEnabled() && Coop_IsPlayableLevel()
+        && Lara_GetItem() != nullptr;
+}
+
+// In co-op nothing stops for a player in a menu: the others play on in the
+// same level, so it goes on here too, creatures, traps and Lara all. She goes
+// on as if her player let go of every key: she lands, comes to a stop, can be
+// struck, and can be moved by what the others do.
+static void M_TickCoveredGame(void)
+{
+    if (!m_GameCovered || !Coop_Net_IsEnabled() || !Coop_IsPlayableLevel()
+        || Lara_GetItem() == nullptr) {
+        return;
+    }
+    Interpolation_Remember();
+    Game_TickBeginFrame();
+    Game_TickWorld();
+
+    const INPUT_STATE input = g_Input;
+    const INPUT_STATE input_db = g_InputDB;
+    g_Input = (INPUT_STATE) {};
+    g_InputDB = (INPUT_STATE) {};
+    Lara_Control();
+    Lara_Hair_Control(false);
+    g_Input = input;
+    g_InputDB = input_db;
+
+    Coop_Net_Control();
+}
+
 void Coop_Tick(void)
 {
     // Called even with no session, to start the one the command line asks
     // for.
     Coop_Net_Service();
+    M_TickCoveredGame();
 }
 
 void Coop_Control(void)
@@ -239,6 +285,23 @@ void Coop_OnLevelSequence(
     default:
         break;
     }
+}
+
+bool Coop_ShouldWaitForHost(const GF_LEVEL *const level)
+{
+    switch (level->type) {
+    case GFL_NORMAL:
+    case GFL_GYM:
+    case GFL_BONUS:
+        return Coop_IsClient() && Coop_Net_IsWaitingForWorld();
+    default:
+        return false;
+    }
+}
+
+bool Coop_TickWaitForHost(void)
+{
+    return Coop_Net_TickWaitForWorld();
 }
 
 bool Coop_SkipsLevelIntro(void)

@@ -254,6 +254,10 @@ static struct {
     // save is a new start too.
     int32_t announced_level;
     int32_t load_count;
+    // On the host, whether the level announced last is loaded and in play.
+    // A client asking for it before then would be handed the level being
+    // left, and its player not what the save being loaded holds for them.
+    bool level_ready;
     bool announced_fresh;
     // On a client, whether the level it is on its way to is already under
     // way, so that its opening videos and cutscenes are not for this game.
@@ -272,6 +276,9 @@ static struct {
     int32_t profile_wait;
     M_BLOB profile_restore;
     M_PLACE restore_place;
+    // Whether Lara was already put where the profile handed back says: done at
+    // once, while what she carries waits for any menu to close.
+    bool restore_placed;
     int16_t restore_room;
     XYZ_32 restore_pos;
     // On a client, why the host ended the session, dealt with once the events
@@ -580,17 +587,9 @@ static void M_ReceiveStart(const ENetPacket *const packet)
         return;
     }
 
-    // Already there: the host loaded it afresh, so only the world needs to
-    // catch up with the host's again. A dead Lara cannot pick up from there,
-    // so she loads it afresh too, and the host's save hands her back.
-    const ITEM *const lara_item = Lara_GetItem();
-    const bool is_alive = lara_item != nullptr && lara_item->hit_points > 0;
-    if (level_num == M_GetLevelNum() && is_alive) {
-        m_Net.world_synced = false;
-        m_Net.world_request_wait = 0;
-        return;
-    }
-
+    // Even a level this game is in already is loaded afresh, as the host did:
+    // then it waits on the loading picture for the host's to be in play, and
+    // nothing done meanwhile in the level being left is lost.
     if (GF_GetLevel(GFLT_MAIN, level_num) == nullptr) {
         LOG_WARNING("Coop: the host is in level %d, which this game lacks",
             level_num);
@@ -1127,7 +1126,8 @@ static void M_ReceiveWorldRequest(
     }
     const uint8_t *cursor = packet->data + M_HEADER_SIZE;
     const int32_t level_num = Coop_Wire_GetS32(&cursor);
-    if (level_num != M_GetLevelNum()) {
+    // Asked again a second on, while unanswered.
+    if (!m_Net.level_ready || level_num != M_GetLevelNum()) {
         return;
     }
     COOP_FLIP_RECORD flip;
@@ -1431,6 +1431,7 @@ static void M_ReceiveRestore(const ENetPacket *const packet)
     M_SetBlob(
         &m_Net.profile_restore, cursor,
         packet->dataLength - M_RESTORE_HEADER_SIZE);
+    m_Net.restore_placed = false;
 }
 
 // Applies what the host handed back once the level has caught up with its
@@ -1440,16 +1441,18 @@ static void M_SyncProfile(void)
     if (M_IsHost() || !m_Net.world_synced) {
         return;
     }
-    if (m_Net.profile_restore.data != nullptr) {
-        const M_BLOB *const restore = &m_Net.profile_restore;
+    // What the host hands back puts Lara where it says at once, menu or not,
+    // as the level goes on behind it. What she carries waits for any menu to
+    // close: an open inventory would be rebuilt under the player's hands.
+    const M_BLOB *const restore = &m_Net.profile_restore;
+    if (restore->data != nullptr && !m_Net.restore_placed) {
+        m_Net.restore_placed = true;
         const bool in_place = m_Net.restore_place == M_PLACE_PROFILE;
         const bool was_dead = in_place
             && Coop_Profile_GetLevelNum(restore->data, restore->size)
                 == M_GetLevelNum()
             && Coop_Profile_GetHitPoints(restore->data, restore->size) <= 0;
-        Coop_Profile_Apply(
-            m_Net.profile_restore.data, m_Net.profile_restore.size, in_place);
-        M_FreeBlob(&m_Net.profile_restore);
+        Coop_Profile_Apply(restore->data, restore->size, false, in_place);
         // Back where she fell, she is still down, waiting to be revived.
         if (was_dead) {
             Lara_Kill();
@@ -1462,6 +1465,11 @@ static void M_SyncProfile(void)
         } else {
             Console_Info("Coop: back where the host's game left you");
         }
+    }
+    if (restore->data != nullptr && Game_IsPlaying()) {
+        Coop_Profile_Apply(restore->data, restore->size, true, false);
+        M_FreeBlob(&m_Net.profile_restore);
+        m_Net.restore_placed = false;
         m_Net.profile_wait = 0;
     }
     if (m_Net.profile_wait-- <= 0) {
@@ -2460,6 +2468,7 @@ void Coop_Net_Control(void)
         // Normally told as the level's sequence starts; this catches a level
         // reached any other way.
         M_AnnounceLevel(level_num, false, true);
+        m_Net.level_ready = true;
     } else {
         m_Net.start_pending = false;
         m_Net.skip_intro = false;
@@ -2509,15 +2518,42 @@ void Coop_Net_OnLevelUnload(void)
     m_Net.damage_pending = 0;
     m_Net.damage_hit_status = false;
     m_Net.damage_fatal = false;
+    m_Net.level_ready = false;
     M_ForgetExit();
 }
 
 void Coop_Net_OnLevelSequence(const int32_t level_num, const bool fresh)
 {
     if (M_IsHost() && m_Net.host != nullptr) {
+        m_Net.level_ready = false;
         M_AnnounceLevel(level_num, true, fresh);
         enet_host_flush(m_Net.host);
     }
+}
+
+bool Coop_Net_IsWaitingForWorld(void)
+{
+    return m_Net.host != nullptr && !M_IsHost() && !m_Net.world_synced;
+}
+
+bool Coop_Net_TickWaitForWorld(void)
+{
+    const int32_t level_num = M_GetLevelNum();
+    if (!Coop_Net_IsWaitingForWorld() || level_num < 0) {
+        return false;
+    }
+    // Learnt now, so that the host's creatures, sent with its level, are
+    // taken in.
+    Coop_Creatures_ApplyReceived();
+    // Asked a second apart: the host answers once its own level is in play.
+    const M_PLAYER *const host = &m_Net.players[M_HOST_INDEX];
+    if (m_Net.host_connected && host->has_state
+        && host->level_num == level_num && m_Net.world_request_wait-- <= 0) {
+        M_SendWorldRequest(level_num);
+        m_Net.world_request_wait = M_WORLD_REQUEST_FRAMES;
+    }
+    enet_host_flush(m_Net.host);
+    return true;
 }
 
 bool Coop_Net_SkipsIntro(void)

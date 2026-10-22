@@ -70,6 +70,12 @@ void Coop_Net_OnLevelUnload(void);
 // may be loading it afresh from a save. A level that is not `fresh`, as one
 // loaded from a save, is joined without its opening.
 void Coop_Net_OnLevelSequence(int32_t level_num, bool fresh);
+// Whether a client is in a level that has yet to catch up with the host's.
+bool Coop_Net_IsWaitingForWorld(void);
+// Called every frame a client waits for that: asks the host for its level
+// until it comes. Returns false once there is nothing more to wait for.
+bool Coop_Net_TickWaitForWorld(void);
+
 // Whether a client is on its way into a level the host has under way, which
 // it joins without the level's opening.
 bool Coop_Net_SkipsIntro(void);

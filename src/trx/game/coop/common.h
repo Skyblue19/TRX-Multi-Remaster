@@ -28,6 +28,14 @@ bool Coop_IsPlayableLevel(void);
 // so the connection keeps going while a player is out of the level.
 void Coop_Tick(void);
 
+// The level being played is covered by a menu, the pause or the photo mode,
+// or uncovered again. In co-op it goes on behind it.
+void Coop_SetGameCovered(bool covered);
+
+// Whether the level behind a menu goes on, so that the picture of it the menu
+// shows must be taken afresh every frame rather than once.
+bool Coop_ShowsLiveBackground(void);
+
 // Called once per logic frame of play, after Lara has moved.
 void Coop_Control(void);
 
@@ -92,6 +100,13 @@ bool Coop_ReviveWithMedipack(int32_t number);
 // A level's sequence is starting, opening videos and all. The host tells the
 // others to start it too.
 void Coop_OnLevelSequence(const GF_LEVEL *level, GF_SEQUENCE_CONTEXT seq_ctx);
+
+// Whether a client, its level loaded, must wait on its loading picture for
+// the host's own to be in play and say how things stand, before it plays.
+// What it did in the level before then would be lost.
+bool Coop_ShouldWaitForHost(const GF_LEVEL *level);
+// Called every frame of that wait. Returns false once it is over.
+bool Coop_TickWaitForHost(void);
 
 // Whether this game is joining a level the host has under way, without the
 // videos, cutscenes and pictures that open it.

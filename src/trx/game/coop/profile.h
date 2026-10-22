@@ -25,5 +25,9 @@ int16_t Coop_Profile_GetHitPoints(const void *data, size_t size);
 
 // Make Lara carry what the profile says. With `with_position`, she is moved
 // to where it was taken too, so long as that was in this level. Returns false
-// for a damaged profile, leaving Lara as she was.
-bool Coop_Profile_Apply(const void *data, size_t size, bool with_position);
+// Make Lara carry what the profile says, with `with_kit`: her inventory, ammo
+// and health. With `with_position`, she is moved to where it was taken too, so
+// long as that was in this level. Returns false for a damaged profile, leaving
+// Lara as she was.
+bool Coop_Profile_Apply(
+    const void *data, size_t size, bool with_kit, bool with_position);

@@ -2,6 +2,7 @@
 
 #include <trx/config.h>
 #include <trx/core/memory.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/game.h>
 #include <trx/game/game_strings/entries.h>
 #include <trx/game/input.h>
@@ -84,6 +85,10 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
 
     Input_Update();
     Shell_ProcessInput();
+    // In co-op the level behind goes on, and so does the picture of it.
+    if (Coop_ShowsLiveBackground()) {
+        Output_Overlay_CaptureGameSnapshot();
+    }
     if (Shell_IsExiting()) {
         return M_Leave(p, (GF_COMMAND) { .action = GF_EXIT_GAME });
     }

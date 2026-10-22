@@ -3,6 +3,7 @@
 #include <trx/config.h>
 #include <trx/core/memory.h>
 #include <trx/game/const.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/fader.h>
 #include <trx/game/game/state.h>
 #include <trx/game/game_strings/entries.h>
@@ -117,6 +118,10 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
     M_PRIV *const p = phase->priv;
     Input_Update();
     Shell_ProcessInput();
+    // In co-op the level behind goes on, and so does the picture of it.
+    if (Coop_ShowsLiveBackground()) {
+        Output_Overlay_CaptureGameSnapshot();
+    }
 
     switch (p->state) {
     case STATE_FADE_IN:

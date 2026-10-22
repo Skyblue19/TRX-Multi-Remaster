@@ -3,6 +3,7 @@
 #include <trx/config.h>
 #include <trx/core/memory.h>
 #include <trx/debug.h>
+#include <trx/game/coop/common.h>
 #include <trx/game/fader.h>
 #include <trx/game/game_flow.h>
 #include <trx/game/inventory_ring.h>
@@ -50,6 +51,13 @@ static PHASE_CONTROL M_Control(PHASE *const phase)
 {
     M_PRIV *const p = phase->priv;
     ASSERT(p->ring != nullptr);
+    // In co-op the level behind goes on, and so does the picture of it, taken
+    // in the game's own lighting.
+    if (p->mode != INV_TITLE_MODE && Coop_ShowsLiveBackground()) {
+        Output_SetInventoryLightingMode(false);
+        Output_Overlay_CaptureGameSnapshot();
+        Output_SetInventoryLightingMode(true);
+    }
     const GF_COMMAND gf_cmd = InvRing_Control(p->ring);
     if (p->mode == INV_TITLE_MODE && p->ring->status == RNG_DONE) {
         p->fade_to_black = true;

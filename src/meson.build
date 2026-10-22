@@ -941,6 +941,7 @@ common_sources = [
   'trx/game/pathing/lot.c',
   'trx/game/paths.c',
   'trx/game/phase/executor.c',
+  'trx/game/phase/phase_coop_wait.c',
   'trx/game/phase/phase_cutscene.c',
   'trx/game/phase/phase_demo.c',
   'trx/game/phase/phase_game.c',

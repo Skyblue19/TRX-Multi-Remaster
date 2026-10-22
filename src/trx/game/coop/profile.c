@@ -167,7 +167,8 @@ int16_t Coop_Profile_GetHitPoints(const void *const data, const size_t size)
     return hit_points;
 }
 
-static RESULT M_Apply(JSON_READ_IO *const io, const bool with_position)
+static RESULT M_Apply(
+    JSON_READ_IO *const io, const bool with_kit, const bool with_position)
 {
     ITEM *const lara_item = Lara_GetItem();
     if (lara_item == nullptr) {
@@ -178,10 +179,12 @@ static RESULT M_Apply(JSON_READ_IO *const io, const bool with_position)
     int16_t hit_points = 0;
     MUST(JSON_READ(io, "level", &level_num));
     MUST(JSON_READ(io, "hit_points", &hit_points));
-    MUST(SG_File_LoadInventory(io));
-    MUST(M_LoadAmmo(io));
-    if (hit_points > 0) {
-        lara_item->hit_points = MIN(hit_points, LARA_MAX_HITPOINTS);
+    if (with_kit) {
+        MUST(SG_File_LoadInventory(io));
+        MUST(M_LoadAmmo(io));
+        if (hit_points > 0) {
+            lara_item->hit_points = MIN(hit_points, LARA_MAX_HITPOINTS);
+        }
     }
 
     const GF_LEVEL *const level = Game_GetCurrentLevel();
@@ -207,7 +210,8 @@ static RESULT M_Apply(JSON_READ_IO *const io, const bool with_position)
 }
 
 bool Coop_Profile_Apply(
-    const void *const data, const size_t size, const bool with_position)
+    const void *const data, const size_t size, const bool with_kit,
+    const bool with_position)
 {
     JSON_VALUE *const root = M_Unpack(data, size);
     if (root == nullptr) {
@@ -217,7 +221,9 @@ bool Coop_Profile_Apply(
     JSON_READ_IO *const io =
         JSON_ReadIO_Create(root, SG_CURRENT_VERSION, "co-op profile");
     const bool applied =
-        SHOULD(M_Apply(io, with_position), "Coop: cannot apply a profile");
+        SHOULD(
+            M_Apply(io, with_kit, with_position),
+            "Coop: cannot apply a profile");
     JSON_ReadIO_Destroy(io);
     JSON_ValueFree(root);
     return applied;

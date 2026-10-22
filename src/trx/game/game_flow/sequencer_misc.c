@@ -125,6 +125,15 @@ GF_COMMAND GF_RunCutscene(const int32_t cutscene_num, const bool cross_fade_in)
 GF_COMMAND GF_RunGame(
     const GF_LEVEL *const level, const GF_SEQUENCE_CONTEXT seq_ctx)
 {
+    if (Coop_ShouldWaitForHost(level)) {
+        PHASE *const wait_phase = Phase_CoopWait_Create(level);
+        const GF_COMMAND wait_cmd = PhaseExecutor_Run(wait_phase);
+        Phase_CoopWait_Destroy(wait_phase);
+        if (wait_cmd.action != GF_NOOP) {
+            return wait_cmd;
+        }
+    }
+
     PHASE *const phase = Phase_Game_Create(level, seq_ctx);
     const GF_COMMAND gf_cmd = PhaseExecutor_Run(phase);
     Phase_Game_Destroy(phase);
